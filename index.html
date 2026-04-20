@@ -47,7 +47,7 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* スケジュール特有のレイアウト */
+        /* スケジュールレイアウト */
         .date-info { display: flex; flex-direction: column; }
         .date-text { font-size: 13px; color: #ddddff; margin-bottom: 4px; }
         .date-text span { font-size: 18px; font-weight: bold; color: #ffffff; margin-right: 8px; }
@@ -99,10 +99,11 @@
 
     <script>
         const csvUrlBase = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
+        // 504323171 を固定
         const pollCsvUrl = csvUrlBase + '&gid=504323171'; 
         const voteApiUrl = 'https://script.google.com/macros/s/AKfycbx_kwFNvHeXimdZayUctufH2o1Lbr5pHtBwYAYNMh7bT6XEs_pAHv_64aWrRJz5GF2T/exec';
         
-        const MAX_VOTES = 100;
+        const MAX_VOTES = 1;
 
         const monthColors = {
             "1": "rgba(200, 230, 255, 0.2)", "2": "rgba(220, 200, 255, 0.2)", "3": "rgba(255, 200, 220, 0.2)",
@@ -186,7 +187,7 @@
                 }
                 count = parseInt(localStorage.getItem('voteCount') || '0');
                 if (count >= MAX_VOTES) {
-                    showToast('1日1回よ('ω')');
+                    showToast('1日1回よ(\'ω\')');
                     return;
                 }
             } catch(e) { }
@@ -195,7 +196,7 @@
             .then(() => {
                 count++;
                 try { localStorage.setItem('voteCount', count.toString()); } catch(e){}
-                showToast('投票完了！ (今日' + count + '回目)');
+                showToast('投票完了！');
             })
             .catch(() => {
                 showToast('送信エラーが発生しました');
