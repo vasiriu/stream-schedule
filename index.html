@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>スケジュール & アンケート</title>
+    <title>配信スケジュール & アンケート</title>
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
     <style>
         body {
@@ -118,12 +118,12 @@
     <div class="schedule-frame">
         <div class="frame-top"></div>
         <div class="frame-middle">
-            <div class="section-title">配信予定</div>
+            <div class="section-title">STREAM SCHEDULE</div>
             <div id="schedule-container">
                 <div class="loading">読み込み中...</div>
             </div>
 
-            <div class="section-title" style="margin-top: 40px;">やってほしいゲーム</div>
+            <div class="section-title" style="margin-top: 40px;">NEXT GAME POLL</div>
             <div id="poll-container">
                 <div class="loading">読み込み中...</div>
             </div>
@@ -135,9 +135,12 @@
 
     <script>
         const csvUrlBase = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
-        // アンケート用シートのgid。ここが正しいか確認してください
-        const pollCsvUrl = csvUrlBase + '&gid=504323171'; 
+        // ★アンケート用シートのgid。前回400エラーが出たため、正しい数字に書き換えてください
+        const pollCsvUrl = csvUrlBase + '&gid=204098939'; 
         const voteApiUrl = 'https://script.google.com/macros/s/AKfycbx_kwFNvHeXimdZayUctufH2o1Lbr5pHtBwYAYNMh7bT6XEs_pAHv_64aWrRJz5GF2T/exec';
+
+        // 1日の最大投票数
+        const MAX_VOTES_PER_DAY = 10;
 
         const monthColors = {
             "1": "rgba(200, 230, 255, 0.2)", "2": "rgba(220, 200, 255, 0.2)", "3": "rgba(255, 200, 220, 0.2)",
@@ -155,7 +158,6 @@
         Papa.parse(csvUrlBase, {
             download: true, header: true, skipEmptyLines: true,
             complete: function(results) {
-                console.log("Schedule CSV Data:", results.data);
                 const container = document.getElementById('schedule-container');
                 const now = new Date();
                 const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -177,10 +179,6 @@
                     container.appendChild(card);
                 });
                 updateDisplayTime();
-            },
-            error: function(err) {
-                console.error("Schedule Load Error:", err);
-                document.getElementById('schedule-container').innerHTML = '<div class="error-text">スケジュールの読み込みに失敗しました</div>';
             }
         });
 
@@ -188,20 +186,16 @@
         Papa.parse(pollCsvUrl, {
             download: true, header: true, skipEmptyLines: true,
             complete: function(results) {
-                console.log("Poll CSV Data:", results.data);
                 const container = document.getElementById('poll-container');
                 container.innerHTML = ''; 
                 
-                if (!results.data || results.data.length === 0) {
+                if (!results || !results.data || results.data.length === 0) {
                     container.innerHTML = '<div class="loading">現在進行中のアンケートはありません</div>';
                     return;
                 }
 
-                results.data.forEach((row, index) => {
-                    // 「タイトル」列がない場合のフォールバックとして最初の列を使用
+                results.data.forEach(row => {
                     const title = row['タイトル'] || row[Object.keys(row)[0]]; 
-                    console.log(`Poll Item ${index}:`, title);
-
                     if (title && title.trim() !== "") {
                         const card = document.createElement('div');
                         card.className = 'poll-card';
@@ -210,21 +204,40 @@
                         container.appendChild(card);
                     }
                 });
-
-                if (container.innerHTML === '') {
-                    container.innerHTML = '<div class="loading">有効なアンケート項目が見つかりませんでした</div>';
-                }
             },
             error: function(err) {
-                console.error("Poll Load Error:", err);
-                document.getElementById('poll-container').innerHTML = '<div class="error-text">アンケートの取得に失敗しました。URLまたはgidを確認してください</div>';
+                document.getElementById('poll-container').innerHTML = '<div class="error-text">アンケートの取得に失敗しました。gidが正しいか確認してください</div>';
             }
         });
         
         function vote(title) {
+            // 連打・制限チェック
+            const today = new Date().toLocaleDateString();
+            const lastDate = localStorage.getItem('lastVoteDate');
+            let count = parseInt(localStorage.getItem('voteCount') || '0');
+
+            // 日付が変わっていたらリセット
+            if (lastDate !== today) {
+                count = 0;
+                localStorage.setItem('lastVoteDate', today);
+            }
+
+            // 制限チェック
+            if (count >= MAX_VOTES_PER_DAY) {
+                alert('本日の投票上限（' + MAX_VOTES_PER_DAY + '回）に達しました。また明日お願いします！');
+                return;
+            }
+
+            // 投票実行
             if(!voteApiUrl.includes('http')) { alert('GASの設定が必要です'); return; }
+            
             fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, { mode: 'no-cors' });
-            alert(title + ' に投票しました！');
+            
+            // カウントを増やして保存
+            count++;
+            localStorage.setItem('voteCount', count);
+            
+            alert(title + ' に投票しました！（本日 ' + count + '/' + MAX_VOTES_PER_DAY + '回目）');
         }
     </script>
 </body>
