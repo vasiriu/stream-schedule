@@ -11,7 +11,7 @@
             background-color: #1e1e2f;
             color: #ffffff;
             margin: 0;
-            padding: 10px;
+            padding: 20px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -23,34 +23,21 @@
             margin: 0 auto; 
             display: flex;
             flex-direction: column;
-            position: relative;
+            position: relative; /* 重なり判定のために追加 */
         }
 
-        .frame-top { width: 100%; aspect-ratio: 1152 / 216; background-image: url('top.png'); background-size: 100% 100%; background-repeat: no-repeat; }
-        .frame-middle { 
-            width: 100%; 
-            background-image: url('lr.png'); 
-            background-size: 100% auto; 
-            background-repeat: repeat-y; 
-            padding: 0px 50px; 
-            box-sizing: border-box;
-            position: relative;
-        }
-        .frame-bottom { width: 100%; aspect-ratio: 1152 / 43; background-image: url('foot.png'); background-size: 100% 100%; background-repeat: no-repeat; }
+        .frame-top { width: 100%; aspect-ratio: 1152 / 216; background-image: url('top.png'); background-size: 100% 100%; background-repeat: no-repeat; flex-shrink: 0; }
+        .frame-middle { width: 100%; background-image: url('lr.png'); background-size: 100% auto; background-repeat: repeat-y; padding: 0px 50px; box-sizing: border-box; position: relative; z-index: 1; }
+        .frame-bottom { width: 100%; aspect-ratio: 1152 / 43; background-image: url('foot.png'); background-size: 100% 100%; background-repeat: no-repeat; flex-shrink: 0; }
 
-        .section-title { 
-            text-align: center; 
-            font-size: 18px; 
-            font-weight: bold; 
-            margin: 10px 0 20px 0; 
-            color: #a8a8ff; 
-            text-decoration: underline; 
-        }
+        .section-title { text-align: center; font-size: 18px; font-weight: bold; margin: 10px 0 20px 0; color: #a8a8ff; text-decoration: underline; }
 
         #schedule-container, #poll-container { 
             display: flex; 
             flex-direction: column; 
             gap: 12px; 
+            position: relative;
+            z-index: 10; /* コンテンツを手前に */
         }
 
         .schedule-card, .poll-card {
@@ -63,6 +50,9 @@
             background-color: rgba(255, 255, 255, 0.1);
             transition: all 0.2s;
             cursor: pointer;
+            user-select: none;
+            position: relative;
+            z-index: 100; /* スマホでのタップを確実にするため */
         }
 
         .poll-card:active {
@@ -70,21 +60,22 @@
             transform: scale(0.98);
         }
 
-        .title-text { font-size: 15px; font-weight: bold; }
+        .title-text { font-size: 15px; font-weight: bold; pointer-events: none; }
 
         #toast {
             position: fixed;
-            bottom: 30px;
+            bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.9);
+            background: rgba(0, 0, 0, 0.8);
             color: white;
-            padding: 12px 24px;
-            border-radius: 25px;
+            padding: 10px 20px;
+            border-radius: 20px;
             font-size: 14px;
             display: none;
             z-index: 10000;
             border: 1px solid #a8a8ff;
+            white-space: nowrap;
         }
 
         #last-updated { margin-top: 30px; font-size: 11px; color: #8888aa; text-align: center; }
@@ -109,9 +100,11 @@
     <div id="toast"></div>
 
     <script>
-        const scheduleCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
-        const pollCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?gid=204098939&output=csv';
+        const csvUrlBase = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
+        const pollCsvUrl = csvUrlBase + '&gid=204098939'; 
         const voteApiUrl = 'https://script.google.com/macros/s/AKfycbx_kwFNvHeXimdZayUctufH2o1Lbr5pHtBwYAYNMh7bT6XEs_pAHv_64aWrRJz5GF2T/exec';
+        
+        const MAX_VOTES = 10;
 
         function showToast(msg) {
             const toast = document.getElementById('toast');
@@ -120,66 +113,80 @@
             setTimeout(() => { toast.style.display = 'none'; }, 3000);
         }
 
-        // まずスケジュールを読み込み、完了したらアンケートを読み込む順序に変更
-        function loadData() {
-            // 1. スケジュール取得
-            Papa.parse(scheduleCsvUrl, {
-                download: true,
-                header: true,
-                skipEmptyLines: true,
-                complete: function(results) {
-                    const container = document.getElementById('schedule-container');
-                    container.innerHTML = '';
-                    results.data.slice(0, 5).forEach(row => {
-                        if(!row['内容']) return;
-                        const card = document.createElement('div');
-                        card.className = 'schedule-card';
-                        card.innerHTML = `<div>${row['月']}/${row['日']} ${row['内容']}</div>`;
-                        container.appendChild(card);
-                    });
-                    document.getElementById('last-updated').innerText = `データ同期日時：${new Date().toLocaleString()}`;
+        // スケジュール取得
+        Papa.parse(csvUrlBase, {
+            download: true, header: true, skipEmptyLines: true,
+            complete: function(results) {
+                const container = document.getElementById('schedule-container');
+                container.innerHTML = '';
+                results.data.slice(0, 5).forEach(row => {
+                    if(!row['内容']) return;
+                    const card = document.createElement('div');
+                    card.className = 'schedule-card';
+                    card.innerHTML = `<div>${row['月']}/${row['日']} ${row['内容']}</div>`;
+                    container.appendChild(card);
+                });
+                document.getElementById('last-updated').innerText = `最終更新：${new Date().toLocaleString()}`;
+            }
+        });
+
+        // アンケート取得
+        Papa.parse(pollCsvUrl, {
+            download: true, header: true, skipEmptyLines: true,
+            complete: function(results) {
+                const container = document.getElementById('poll-container');
+                container.innerHTML = '';
+                
+                if (results.data.length === 0) {
+                    container.innerHTML = '<div class="loading">項目がありません</div>';
+                    return;
+                }
+
+                results.data.forEach(row => {
+                    const title = row['タイトル'] || row[Object.keys(row)[0]];
+                    if (!title) return;
+
+                    const card = document.createElement('div');
+                    card.className = 'poll-card';
+                    card.innerHTML = `<div class="title-text">${title}</div>`;
                     
-                    // スケジュールが終わってからアンケートを開始
-                    loadPoll();
-                }
-            });
-        }
-
-        function loadPoll() {
-            // 2. アンケート取得
-            Papa.parse(pollCsvUrl, {
-                download: true,
-                header: true,
-                skipEmptyLines: true,
-                complete: function(results) {
-                    const container = document.getElementById('poll-container');
-                    container.innerHTML = '';
-                    results.data.forEach(row => {
-                        const title = row['タイトル'] || row[Object.keys(row)[0]];
-                        if (!title || title.trim() === "") return;
-
-                        const card = document.createElement('div');
-                        card.className = 'poll-card';
-                        card.innerHTML = `<div class="title-text">${title}</div>`;
-                        card.onclick = function() { vote(title); };
-                        container.appendChild(card);
-                    });
-                },
-                error: function() {
-                    document.getElementById('poll-container').innerHTML = '<div class="loading">アンケート読み込み失敗</div>';
-                }
-            });
-        }
+                    card.onclick = function() { vote(title); };
+                    
+                    container.appendChild(card);
+                });
+            },
+            error: function() {
+                document.getElementById('poll-container').innerHTML = '<div class="loading">データの読み込みに失敗しました</div>';
+            }
+        });
 
         function vote(title) {
-            showToast(title + ' に投票しています...');
-            fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, { mode: 'no-cors' })
-            .then(() => { showToast('投票完了！'); })
-            .catch(() => { showToast('送信エラー'); });
-        }
+            let count = 0;
+            const today = new Date().toLocaleDateString();
+            try {
+                if (localStorage.getItem('lastDate') !== today) {
+                    localStorage.setItem('voteCount', '0');
+                    localStorage.setItem('lastDate', today);
+                }
+                count = parseInt(localStorage.getItem('voteCount') || '0');
+                if (count >= MAX_VOTES) {
+                    showToast('本日の上限（10回）に達しました');
+                    return;
+                }
+            } catch(e) { }
 
-        // 実行開始
-        loadData();
+            showToast(title + ' に投票中...');
+            
+            fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, { mode: 'no-cors' })
+            .then(() => {
+                count++;
+                try { localStorage.setItem('voteCount', count.toString()); } catch(e){}
+                showToast('投票完了！ (今日' + count + '回目)');
+            })
+            .catch(() => {
+                showToast('エラーが発生しました');
+            });
+        }
     </script>
 </body>
 </html>
