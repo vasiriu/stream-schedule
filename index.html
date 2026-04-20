@@ -17,6 +17,9 @@
             align-items: center;
         }
         
+        /* -----------------------------------
+           3パーツ構成の枠デザイン（画像有効化済み）
+           ----------------------------------- */
         .schedule-frame {
             width: 100%;
             max-width: 500px;
@@ -24,22 +27,29 @@
         }
 
         .frame-top {
-            height: 40px; 
-            background-color: #d98b2b;
-            border-radius: 20px 20px 0 0;
+            height: 60px; /* top.png の高さに合わせて調整してください */
+            background-image: url('top.png'); /* 画像を有効にしました */
+            background-size: 100% 100%;
+            background-repeat: no-repeat;
         }
 
         .frame-middle {
-            background: linear-gradient(to right, #8bc34a 20px, #2a2a40 20px, #2a2a40 calc(100% - 20px), #8bc34a calc(100% - 20px));
+            background-image: url('lr.png'); /* 左右の画像を有効にしました */
+            background-size: 100% auto;
+            background-repeat: repeat-y; /* 縦方向に繰り返して伸びる設定です */
             padding: 20px 40px; 
         }
 
         .frame-bottom {
-            height: 40px; 
-            background-color: #c05028;
-            border-radius: 0 0 20px 20px;
+            height: 60px; /* foot.png の高さに合わせて調整してください */
+            background-image: url('foot.png'); /* 画像を有効にしました */
+            background-size: 100% 100%;
+            background-repeat: no-repeat;
         }
 
+        /* -----------------------------------
+           中身のデザイン
+           ----------------------------------- */
         .schedule-header {
             text-align: center;
             font-size: 28px;
@@ -56,7 +66,7 @@
         }
 
         .schedule-card {
-            background-color: rgba(0, 0, 0, 0.3); 
+            background-color: rgba(0, 0, 0, 0.4); 
             border-radius: 8px;
             padding: 15px;
             display: flex;
@@ -100,6 +110,14 @@
             background-color: #c05028;
         }
 
+        /* 最終更新日の表示スタイル */
+        #last-updated {
+            margin-top: 30px;
+            font-size: 12px;
+            color: #8888aa;
+            text-align: center;
+        }
+
         .loading, .error-message {
             text-align: center;
             padding: 10px;
@@ -108,9 +126,7 @@
             color: #ff8888;
             background-color: rgba(255, 0, 0, 0.1);
             border-radius: 8px;
-            text-align: left;
             font-size: 14px;
-            word-break: break-all;
         }
     </style>
 </head>
@@ -127,37 +143,41 @@
         <div class="frame-bottom"></div>
     </div>
 
+    <div id="last-updated"></div>
+
     <script>
         const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
+
+        // 最終更新日を自動表示する処理
+        function displayLastUpdated() {
+            const date = new Date(document.lastModified);
+            const y = date.getFullYear();
+            const m = date.getMonth() + 1;
+            const d = date.getDate();
+            const h = String(date.getHours()).padStart(2, '0');
+            const min = String(date.getMinutes()).padStart(2, '0');
+            document.getElementById('last-updated').innerText = `最終更新：${y}年${m}月${d}日 ${h}:${min}`;
+        }
+        displayLastUpdated();
 
         Papa.parse(csvUrl, {
             download: true,
             header: true,
-            // 空行を自動でスキップする設定を追加
             skipEmptyLines: true, 
             complete: function(results) {
                 const container = document.getElementById('schedule-container');
-                
                 try {
                     const data = results.data;
                     const currentYear = new Date().getFullYear();
 
-                    // データが本当に空かどうかの判定をより安全に
                     if (!data || data.length === 0) {
                         container.innerHTML = '<div class="loading">現在予定されている配信はありません。</div>';
                         return;
                     }
 
-                    // 1行目の見出し（キー）を取得して、スプレッドシートの項目名が間違っていないかチェック
-                    const keys = Object.keys(data[0]);
-                    if (!keys.includes('月') || !keys.includes('日') || !keys.includes('時間') || !keys.includes('内容')) {
-                        throw new Error(`スプレッドシートの1行目の見出しが間違っています。現在の見出し: [${keys.join(', ')}]。「月」「日」「時間」「内容」にしてください。スペースなども入れないでください。`);
-                    }
-
                     container.innerHTML = ''; 
 
                     data.forEach(row => {
-                        // データが空なら安全にスキップ
                         const rawMonth = row['月'] || '';
                         const rawDay = row['日'] || '';
                         const rawTime = row['時間'] || '';
@@ -176,7 +196,6 @@
                         if (timeMatch) {
                             const hours = parseInt(timeMatch[1]);
                             const minutes = parseInt(timeMatch[2]);
-                            
                             const startDate = new Date(currentYear, parseInt(month) - 1, parseInt(day), hours, minutes);
                             const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
 
@@ -190,13 +209,11 @@
 
                             const startStr = formatGCalDate(startDate);
                             const endStr = formatGCalDate(endDate);
-                            
                             calLink = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${startStr}/${endStr}&details=${encodeURIComponent("配信をお楽しみに！")}`;
                         }
 
                         const card = document.createElement('div');
                         card.className = 'schedule-card';
-
                         card.innerHTML = `
                             <div class="date-info">
                                 <div class="date-text"><span>${month}/${day}</span> ${time}</div>
@@ -204,27 +221,11 @@
                             </div>
                             <a href="${calLink}" class="calendar-btn" target="_blank" rel="noopener noreferrer">カレンダー追加</a>
                         `;
-
                         container.appendChild(card);
                     });
                 } catch (e) {
-                    // フリーズせずに、画面に何が原因で止まったかを表示する
-                    container.innerHTML = `
-                        <div class="error-message">
-                            <b>内部エラーが発生しました</b><br><br>
-                            ${e.message}
-                        </div>
-                    `;
+                    container.innerHTML = `<div class="error-message">内部エラー: ${e.message}</div>`;
                 }
-            },
-            error: function(err) {
-                const errorDetail = err.message || JSON.stringify(err) || "不明なエラー";
-                document.getElementById('schedule-container').innerHTML = `
-                    <div class="error-message">
-                        <b>通信エラーが発生しました。</b><br><br>
-                        【エラー詳細】<br>${errorDetail}
-                    </div>
-                `;
             }
         });
     </script>
