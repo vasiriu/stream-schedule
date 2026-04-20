@@ -26,7 +26,6 @@
             position: relative;
         }
 
-        /* 枠パーツの設定 */
         .frame-top { 
             width: 100%; 
             aspect-ratio: 1152 / 216; 
@@ -42,7 +41,6 @@
             padding: 0px 50px; 
             box-sizing: border-box;
             position: relative;
-            z-index: 1;
         }
         .frame-bottom { 
             width: 100%; 
@@ -66,7 +64,7 @@
             flex-direction: column; 
             gap: 12px; 
             position: relative;
-            z-index: 10; /* コンテンツを手前に */
+            z-index: 10;
         }
 
         .schedule-card, .poll-card {
@@ -78,15 +76,13 @@
             border-left: 4px solid #ffffff;
             background-color: rgba(255, 255, 255, 0.1);
             transition: all 0.2s;
-            /* スマホでタップ可能にするための必須設定 */
             cursor: pointer; 
             position: relative;
-            z-index: 100; 
+            z-index: 999; /* 重なり問題の解決 */
             touch-action: manipulation;
-            -webkit-tap-highlight-color: rgba(255, 255, 255, 0.3); /* タップ時のハイライト */
+            -webkit-tap-highlight-color: rgba(255, 255, 255, 0.3);
         }
 
-        /* タップ・クリック時の反応（明転） */
         .poll-card:active {
             background-color: rgba(255, 255, 255, 0.3);
             transform: scale(0.98);
@@ -94,13 +90,12 @@
 
         .title-text { font-size: 15px; font-weight: bold; pointer-events: none; }
 
-        /* 通知トースト（alertの代わり） */
         #toast {
             position: fixed;
             bottom: 30px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.9);
             color: white;
             padding: 12px 24px;
             border-radius: 25px;
@@ -108,7 +103,7 @@
             display: none;
             z-index: 10000;
             border: 1px solid #a8a8ff;
-            white-space: nowrap;
+            text-align: center;
         }
 
         #last-updated { margin-top: 30px; font-size: 11px; color: #8888aa; text-align: center; }
@@ -133,9 +128,11 @@
     <div id="toast"></div>
 
     <script>
-        // 設定
-        const csvUrlBase = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
-        const pollCsvUrl = csvUrlBase + '&gid=204098939'; 
+        // ★重要：アンケート用スプレッドシートのURLを正しく設定してください
+        const scheduleCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
+        // アンケート用URL（前回の400エラーが起きていないURLをここに入れてください）
+        const pollCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?gid=204098939&single=true&output=csv';
+        
         const voteApiUrl = 'https://script.google.com/macros/s/AKfycbx_kwFNvHeXimdZayUctufH2o1Lbr5pHtBwYAYNMh7bT6XEs_pAHv_64aWrRJz5GF2T/exec';
         const MAX_VOTES = 10;
 
@@ -147,7 +144,7 @@
         }
 
         // スケジュール取得
-        Papa.parse(csvUrlBase, {
+        Papa.parse(scheduleCsvUrl, {
             download: true, header: true, skipEmptyLines: true,
             complete: function(results) {
                 const container = document.getElementById('schedule-container');
@@ -159,7 +156,7 @@
                     card.innerHTML = `<div>${row['月']}/${row['日']} ${row['内容']}</div>`;
                     container.appendChild(card);
                 });
-                document.getElementById('last-updated').innerText = `更新：${new Date().toLocaleString()}`;
+                document.getElementById('last-updated').innerText = `データ同期日時：${new Date().toLocaleString()}`;
             }
         });
 
@@ -178,14 +175,16 @@
                     card.className = 'poll-card';
                     card.innerHTML = `<div class="title-text">${title}</div>`;
                     
-                    // タップイベントを確実に拾う
-                    card.addEventListener('click', function(e) {
-                        e.preventDefault();
+                    // スマホ・PC両対応のクリック登録
+                    card.onclick = function() {
                         vote(title);
-                    });
+                    };
                     
                     container.appendChild(card);
                 });
+            },
+            error: function() {
+                document.getElementById('poll-container').innerHTML = '<div class="loading">アンケートURLエラー</div>';
             }
         });
 
@@ -205,7 +204,7 @@
                 }
             } catch(e) {}
 
-            showToast(title + ' に投票しています...');
+            showToast(title + ' に投票中...');
             
             fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, { mode: 'no-cors' })
             .then(() => {
@@ -214,7 +213,7 @@
                 showToast('投票完了！ (今日' + count + '回目)');
             })
             .catch(() => {
-                showToast('通信エラーが発生しました');
+                showToast('送信エラー');
             });
         }
     </script>
