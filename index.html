@@ -134,8 +134,7 @@
 
     <script>
         const csvUrlBase = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
-        // アンケート用シートのCSV（gidはシートごとに変わりますが、まずは全体読み込みで対応）
-        const pollCsvUrl = csvUrlBase + '&gid=204098939'; // ★アンケートシートのgidを確認してください
+        const pollCsvUrl = csvUrlBase + '&gid=204098939'; 
         const voteApiUrl = 'https://script.google.com/macros/s/AKfycbx_kwFNvHeXimdZayUctufH2o1Lbr5pHtBwYAYNMh7bT6XEs_pAHv_64aWrRJz5GF2T/exec';
 
         const monthColors = {
@@ -169,7 +168,6 @@
                     const card = document.createElement('div');
                     card.className = 'schedule-card';
                     card.style.backgroundColor = monthColors[row['月']] || "rgba(0,0,0,0.4)";
-                    // Googleカレンダーリンク生成（中略）
                     const calLink = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(row['内容'])}&dates=${now.getFullYear()}${row['月'].padStart(2,'0')}${row['日'].padStart(2,'0')}T200000Z/210000Z`;
                     
                     card.innerHTML = `<div class="date-info"><div class="date-text"><span>${row['月']}/${row['日']}</span> ${row['時間']}</div><div class="title-text">${row['内容']}</div></div><a href="${calLink}" class="calendar-btn" target="_blank">📅</a>`;
@@ -179,9 +177,31 @@
             }
         });
 
-        // アンケート読み込み
-        // ※アンケート用シートの公開設定URLが必要です。
-        // 面倒な場合は、まずスケジュールが表示されるか確認しましょう。
+        // アンケート読み込み（追加分）
+        Papa.parse(pollCsvUrl, {
+            download: true, header: true, skipEmptyLines: true,
+            complete: function(results) {
+                const container = document.getElementById('poll-container');
+                container.innerHTML = ''; // ローディング消去
+                
+                if (results.data.length === 0) {
+                    container.innerHTML = '<div class="loading">アンケートはありません</div>';
+                    return;
+                }
+
+                results.data.forEach(row => {
+                    // CSVの列名が"タイトル"であることを想定しています。適宜修正してください
+                    const title = row['タイトル'] || row[Object.keys(row)[0]]; 
+                    if (!title) return;
+
+                    const card = document.createElement('div');
+                    card.className = 'poll-card';
+                    card.innerHTML = `<div class="poll-info"><div class="title-text">${title}</div></div>`;
+                    card.onclick = () => vote(title);
+                    container.appendChild(card);
+                });
+            }
+        });
         
         function vote(title) {
             if(!voteApiUrl.includes('http')) { alert('GASの設定が必要です'); return; }
