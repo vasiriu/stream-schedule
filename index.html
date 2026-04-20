@@ -25,47 +25,13 @@
             flex-direction: column;
         }
 
-        .frame-top {
-            width: 100%;
-            aspect-ratio: 1152 / 216; 
-            background-image: url('top.png');
-            background-size: 100% 100%;
-            background-repeat: no-repeat;
-            flex-shrink: 0;
-        }
+        .frame-top { width: 100%; aspect-ratio: 1152 / 216; background-image: url('top.png'); background-size: 100% 100%; background-repeat: no-repeat; flex-shrink: 0; }
+        .frame-middle { width: 100%; background-image: url('lr.png'); background-size: 100% auto; background-repeat: repeat-y; padding: 0px 50px; box-sizing: border-box; }
+        .frame-bottom { width: 100%; aspect-ratio: 1152 / 43; background-image: url('foot.png'); background-size: 100% 100%; background-repeat: no-repeat; flex-shrink: 0; }
 
-        .frame-middle {
-            width: 100%;
-            background-image: url('lr.png');
-            background-size: 100% auto;
-            background-repeat: repeat-y; 
-            padding: 0px 50px; 
-            box-sizing: border-box;
-        }
+        .section-title { text-align: center; font-size: 18px; font-weight: bold; margin: 10px 0 20px 0; color: #a8a8ff; text-decoration: underline; }
 
-        .frame-bottom {
-            width: 100%;
-            aspect-ratio: 1152 / 43; 
-            background-image: url('foot.png');
-            background-size: 100% 100%;
-            background-repeat: no-repeat;
-            flex-shrink: 0;
-        }
-
-        .section-title {
-            text-align: center;
-            font-size: 18px;
-            font-weight: bold;
-            margin: 10px 0 20px 0;
-            color: #a8a8ff;
-            text-decoration: underline;
-        }
-
-        #schedule-container, #poll-container {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
+        #schedule-container, #poll-container { display: flex; flex-direction: column; gap: 12px; }
 
         .schedule-card, .poll-card {
             border-radius: 8px;
@@ -74,39 +40,41 @@
             justify-content: space-between;
             align-items: center;
             border-left: 4px solid #ffffff;
-            transition: transform 0.2s;
-        }
-
-        .poll-card {
-            cursor: pointer;
             background-color: rgba(255, 255, 255, 0.1);
-        }
-        .poll-card:hover {
-            transform: translateX(5px);
-            background-color: rgba(255, 255, 255, 0.2);
+            transition: all 0.1s;
+            cursor: pointer;
+            user-select: none;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
 
-        .date-info, .poll-info {
-            display: flex;
-            flex-direction: column;
+        .poll-card:active {
+            background-color: rgba(255, 255, 255, 0.3) !important;
+            transform: scale(0.98);
         }
-        .date-text { font-size: 13px; color: #ddddff; margin-bottom: 4px; }
-        .date-text span { font-size: 18px; font-weight: bold; color: #ffffff; margin-right: 8px; }
-        .title-text { font-size: 15px; font-weight: bold; }
 
-        .calendar-btn {
-            background: none;
-            text-decoration: none;
-            font-size: 24px;
-            transition: transform 0.2s;
-        }
-        .calendar-btn:hover { transform: scale(1.2); }
+        /* スケジュール詳細用の装飾 */
+        .date-box { display: flex; align-items: center; gap: 8px; }
+        .calendar-icon { font-size: 18px; }
+        .time-text { font-size: 12px; color: #a8a8ff; margin-left: 4px; }
+        .content-text { font-size: 15px; font-weight: bold; }
 
-        #last-updated {
-            margin-top: 30px;
-            font-size: 11px;
-            color: #8888aa;
-            text-align: center;
+        .title-text { font-size: 15px; font-weight: bold; pointer-events: none; }
+
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            display: none;
+            z-index: 10000;
+            border: 1px solid #a8a8ff;
+            white-space: nowrap;
         }
 
         .loading { text-align: center; padding: 20px; font-size: 14px; }
@@ -117,96 +85,119 @@
     <div class="schedule-frame">
         <div class="frame-top"></div>
         <div class="frame-middle">
-            <div class="section-title">STREAM SCHEDULE</div>
-            <div id="schedule-container">
-                <div class="loading">読み込み中...</div>
-            </div>
+            <div class="section-title">スケジュール</div>
+            <div id="schedule-container"><div class="loading">読み込み中...</div></div>
 
-            <div class="section-title" style="margin-top: 40px;">NEXT GAME POLL</div>
-            <div id="poll-container">
-                <div class="loading">読み込み中...</div>
-            </div>
+            <div class="section-title" style="margin-top: 40px;">次やってほしいのは？</div>
+            <div id="poll-container"><div class="loading">読み込み中...</div></div>
         </div>
         <div class="frame-bottom"></div>
     </div>
 
-    <div id="last-updated"></div>
+    <div id="toast"></div>
 
     <script>
         const csvUrlBase = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
-        const pollCsvUrl = csvUrlBase + '&gid=204098939'; 
+        const pollCsvUrl = csvUrlBase + '&gid=504323171'; 
         const voteApiUrl = 'https://script.google.com/macros/s/AKfycbx_kwFNvHeXimdZayUctufH2o1Lbr5pHtBwYAYNMh7bT6XEs_pAHv_64aWrRJz5GF2T/exec';
+        
+        const MAX_VOTES = 100;
 
         const monthColors = {
-            "1": "rgba(200, 230, 255, 0.2)", "2": "rgba(220, 200, 255, 0.2)", "3": "rgba(255, 200, 220, 0.2)",
-            "4": "rgba(255, 220, 220, 0.2)", "5": "rgba(200, 255, 200, 0.2)", "6": "rgba(200, 220, 255, 0.2)",
-            "7": "rgba(200, 255, 255, 0.2)", "8": "rgba(255, 230, 180, 0.2)", "9": "rgba(255, 200, 150, 0.2)",
-            "10": "rgba(255, 180, 150, 0.2)","11": "rgba(220, 200, 180, 0.2)","12": "rgba(255, 255, 200, 0.2)"
+            1: "rgba(200, 230, 255, 0.2)", 2: "rgba(255, 200, 230, 0.2)", 
+            3: "rgba(200, 255, 200, 0.2)", 4: "rgba(255, 255, 180, 0.2)", 
+            5: "rgba(180, 255, 220, 0.2)", 6: "rgba(200, 200, 255, 0.2)", 
+            7: "rgba(255, 220, 180, 0.2)", 8: "rgba(255, 180, 180, 0.2)", 
+            9: "rgba(220, 200, 255, 0.2)", 10: "rgba(255, 210, 150, 0.2)", 
+            11: "rgba(200, 220, 220, 0.2)", 12: "rgba(255, 255, 255, 0.2)" 
         };
 
-        function updateDisplayTime() {
-            const date = new Date();
-            document.getElementById('last-updated').innerText = `データ同期日時：${date.toLocaleString()}`;
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 3000);
         }
 
-        // スケジュール読み込み
+        // スケジュール取得
         Papa.parse(csvUrlBase, {
             download: true, header: true, skipEmptyLines: true,
             complete: function(results) {
                 const container = document.getElementById('schedule-container');
-                const now = new Date();
-                const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-                
-                const events = results.data.filter(row => {
-                    const m = row['月'], d = row['日'];
-                    if(!m || !d) return false;
-                    return new Date(now.getFullYear(), m-1, d).getTime() >= todayStart;
-                }).slice(0, 5);
-
-                container.innerHTML = events.length ? '' : '<div class="loading">予定は順次追加されます</div>';
-                events.forEach(row => {
+                container.innerHTML = '';
+                results.data.slice(0, 5).forEach(row => {
+                    if(!row['内容']) return;
                     const card = document.createElement('div');
                     card.className = 'schedule-card';
-                    card.style.backgroundColor = monthColors[row['月']] || "rgba(0,0,0,0.4)";
-                    const calLink = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(row['内容'])}&dates=${now.getFullYear()}${row['月'].padStart(2,'0')}${row['日'].padStart(2,'0')}T200000Z/210000Z`;
                     
-                    card.innerHTML = `<div class="date-info"><div class="date-text"><span>${row['月']}/${row['日']}</span> ${row['時間']}</div><div class="title-text">${row['内容']}</div></div><a href="${calLink}" class="calendar-btn" target="_blank">📅</a>`;
+                    const m = parseInt(row['月']);
+                    if (monthColors[m]) card.style.backgroundColor = monthColors[m];
+                    
+                    // ディテールの復元：カレンダーアイコンと時間表示
+                    const timeStr = row['時間'] ? `<span class="time-text">${row['時間']}〜</span>` : '';
+                    
+                    card.innerHTML = `
+                        <div class="date-box">
+                            <span class="calendar-icon">📅</span>
+                            <div>
+                                <span style="font-size: 13px;">${row['月']}/${row['日']}</span>
+                                ${timeStr}
+                            </div>
+                        </div>
+                        <div class="content-text">${row['内容']}</div>
+                    `;
                     container.appendChild(card);
                 });
-                updateDisplayTime();
             }
         });
 
-        // アンケート読み込み（追加分）
+        // アンケート取得
         Papa.parse(pollCsvUrl, {
             download: true, header: true, skipEmptyLines: true,
             complete: function(results) {
                 const container = document.getElementById('poll-container');
-                container.innerHTML = ''; // ローディング消去
-                
+                container.innerHTML = '';
                 if (results.data.length === 0) {
-                    container.innerHTML = '<div class="loading">アンケートはありません</div>';
+                    container.innerHTML = '<div class="loading">項目がありません</div>';
                     return;
                 }
-
                 results.data.forEach(row => {
-                    // CSVの列名が"タイトル"であることを想定しています。適宜修正してください
-                    const title = row['タイトル'] || row[Object.keys(row)[0]]; 
+                    const title = row['タイトル'] || row[Object.keys(row)[0]];
                     if (!title) return;
-
                     const card = document.createElement('div');
                     card.className = 'poll-card';
-                    card.innerHTML = `<div class="poll-info"><div class="title-text">${title}</div></div>`;
-                    card.onclick = () => vote(title);
+                    card.ontouchstart = function(){};
+                    card.innerHTML = `<div class="title-text">${title}</div>`;
+                    card.onclick = function() { vote(title); };
                     container.appendChild(card);
                 });
             }
         });
-        
+
         function vote(title) {
-            if(!voteApiUrl.includes('http')) { alert('GASの設定が必要です'); return; }
-            fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, { mode: 'no-cors' });
-            alert(title + ' に投票しました！');
+            let count = 0;
+            const today = new Date().toLocaleDateString();
+            try {
+                if (localStorage.getItem('lastDate') !== today) {
+                    localStorage.setItem('voteCount', '0');
+                    localStorage.setItem('lastDate', today);
+                }
+                count = parseInt(localStorage.getItem('voteCount') || '0');
+                if (count >= MAX_VOTES) {
+                    showToast('1日1回よ('ω')');
+                    return;
+                }
+            } catch(e) { }
+
+            fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, { mode: 'no-cors' })
+            .then(() => {
+                count++;
+                try { localStorage.setItem('voteCount', count.toString()); } catch(e){}
+                showToast('投票完了！ (今日' + count + '回目)');
+            })
+            .catch(() => {
+                showToast('送信エラーが発生しました');
+            });
         }
     </script>
 </body>
