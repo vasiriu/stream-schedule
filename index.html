@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>配信スケジュール</title>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+            background-color: #1e1e2f;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        /* -----------------------------------
+           ここから3パーツに分けた枠のデザイン
+           ----------------------------------- */
+        .schedule-frame {
+            width: 100%;
+            max-width: 500px;
+            /* 画像の幅に合わせるため中央寄せ */
+            margin: 0 auto; 
+        }
+
+        .frame-top {
+            height: 40px; /* top.png の高さに合わせて数値を変更してください */
+            
+            /* ▼ 画像を用意したら、コメント(//)を外して使ってください */
+            /* background-image: url('top.png'); */
+            /* background-size: 100% 100%; */
+            
+            /* 画像が無い時用の仮デザイン（手書きイラスト風オレンジ） */
+            background-color: #d98b2b;
+            border-radius: 20px 20px 0 0;
+        }
+
+        .frame-middle {
+            /* ▼ 画像を用意したら、コメント(//)を外して使ってください */
+            /* background-image: url('lr.png'); */
+            /* background-size: 100% auto; */
+            /* background-repeat: repeat-y; */ /* 縦方向にだけ画像を繰り返す魔法の設定 */
+            
+            /* 画像が無い時用の仮デザイン（左右に緑の枠線） */
+            background: linear-gradient(to right, #8bc34a 20px, #2a2a40 20px, #2a2a40 calc(100% - 20px), #8bc34a calc(100% - 20px));
+            
+            /* 左右の枠（lr.pngの絵柄）の上に文字が被らないように内側に余白をとる */
+            padding: 20px 40px; 
+        }
+
+        .frame-bottom {
+            height: 40px; /* foot.png の高さに合わせて数値を変更してください */
+            
+            /* ▼ 画像を用意したら、コメント(//)を外して使ってください */
+            /* background-image: url('foot.png'); */
+            /* background-size: 100% 100%; */
+            
+            /* 画像が無い時用の仮デザイン（手書きイラスト風赤茶色） */
+            background-color: #c05028;
+            border-radius: 0 0 20px 20px;
+        }
+
+        /* -----------------------------------
+           中身のスケジュールカードのデザイン
+           ----------------------------------- */
+        .schedule-header {
+            text-align: center;
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #ffffff;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        #schedule-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .schedule-card {
+            background-color: rgba(0, 0, 0, 0.3); /* 枠の中の背景色を少し暗くして文字を目立たせる */
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 4px solid #ffffff;
+        }
+
+        .date-info {
+            display: flex;
+            flex-direction: column;
+        }
+        .date-text {
+            font-size: 14px;
+            color: #ddddff;
+            margin-bottom: 4px;
+        }
+        .date-text span {
+            font-size: 20px;
+            font-weight: bold;
+            color: #ffffff;
+            margin-right: 8px;
+        }
+        .title-text {
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .calendar-btn {
+            background-color: #d98b2b;
+            color: white;
+            text-decoration: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            white-space: nowrap;
+            transition: background-color 0.2s;
+        }
+        .calendar-btn:hover {
+            background-color: #c05028;
+        }
+
+        .loading, .error-message {
+            text-align: center;
+            padding: 10px;
+        }
+        .error-message {
+            color: #ff8888;
+            background-color: rgba(255, 0, 0, 0.1);
+            border-radius: 8px;
+            text-align: left;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="schedule-frame">
+        <div class="frame-top"></div>
+        
+        <div class="frame-middle">
+            <div class="schedule-header">スケジュール</div>
+            <div id="schedule-container">
+                <div class="loading">スケジュールを読み込み中...</div>
+            </div>
+        </div>
+        
+        <div class="frame-bottom"></div>
+    </div>
+
+    <script>
+        const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
+
+        Papa.parse(csvUrl, {
+            download: true,
+            header: true,
+            complete: function(results) {
+                const container = document.getElementById('schedule-container');
+                container.innerHTML = ''; 
+
+                const data = results.data;
+                const currentYear = new Date().getFullYear();
+
+                if (data.length === 0 || (data.length === 1 && !data[0]['月'])) {
+                    container.innerHTML = '<div class="loading">現在予定されている配信はありません。</div>';
+                    return;
+                }
+
+                data.forEach(row => {
+                    if (!row['月'] || !row['日'] || !row['時間'] || !row['内容']) return;
+
+                    const month = row['月'].trim();
+                    const day = row['日'].trim();
+                    const time = row['時間'].trim();
+                    const title = row['内容'].trim();
+
+                    const timeMatch = time.match(/(\d{1,2}):(\d{2})/);
+                    let calLink = "#";
+                    
+                    if (timeMatch) {
+                        const hours = parseInt(timeMatch[1]);
+                        const minutes = parseInt(timeMatch[2]);
+                        
+                        const startDate = new Date(currentYear, parseInt(month) - 1, parseInt(day), hours, minutes);
+                        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+
+                        const formatGCalDate = (d) => {
+                            return d.getFullYear().toString() +
+                                String(d.getMonth() + 1).padStart(2, '0') +
+                                String(d.getDate()).padStart(2, '0') + 'T' +
+                                String(d.getHours()).padStart(2, '0') +
+                                String(d.getMinutes()).padStart(2, '0') + '00';
+                        };
+
+                        const startStr = formatGCalDate(startDate);
+                        const endStr
