@@ -41,16 +41,13 @@
             align-items: center;
             border-left: 4px solid #ffffff;
             background-color: rgba(255, 255, 255, 0.1);
-            transition: all 0.1s; /* 反応を速くするため少し短縮 */
+            transition: all 0.1s;
             cursor: pointer;
             user-select: none;
-            
-            /* スマホ用設定 */
-            touch-action: manipulation; /* タップの反応速度向上 */
-            -webkit-tap-highlight-color: transparent; /* 標準の青枠を消す */
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
 
-        /* パソコンのホバーとスマホのタップ時の反応 */
         .poll-card:active {
             background-color: rgba(255, 255, 255, 0.3) !important;
             transform: scale(0.98);
@@ -82,10 +79,10 @@
     <div class="schedule-frame">
         <div class="frame-top"></div>
         <div class="frame-middle">
-            <div class="section-title">SCHEDULE</div>
+            <div class="section-title">スケジュール</div>
             <div id="schedule-container"><div class="loading">読み込み中...</div></div>
 
-            <div class="section-title" style="margin-top: 40px;">アンケート</div>
+            <div class="section-title" style="margin-top: 40px;">次やってほしいのは？</div>
             <div id="poll-container"><div class="loading">読み込み中...</div></div>
         </div>
         <div class="frame-bottom"></div>
@@ -98,7 +95,23 @@
         const pollCsvUrl = csvUrlBase + '&gid=504323171'; 
         const voteApiUrl = 'https://script.google.com/macros/s/AKfycbx_kwFNvHeXimdZayUctufH2o1Lbr5pHtBwYAYNMh7bT6XEs_pAHv_64aWrRJz5GF2T/exec';
         
-        const MAX_VOTES = 100;
+        const MAX_VOTES = 10;
+
+        // 月ごとの背景色設定
+        const monthColors = {
+            1: "rgba(200, 230, 255, 0.2)", // 1月: 水色
+            2: "rgba(255, 200, 230, 0.2)", // 2月: ピンク
+            3: "rgba(200, 255, 200, 0.2)", // 3月: 薄緑
+            4: "rgba(255, 255, 180, 0.2)", // 4月: 薄黄
+            5: "rgba(180, 255, 220, 0.2)", // 5月: エメラルド
+            6: "rgba(200, 200, 255, 0.2)", // 6月: 青紫
+            7: "rgba(255, 220, 180, 0.2)", // 7月: オレンジ
+            8: "rgba(255, 180, 180, 0.2)", // 8月: 赤
+            9: "rgba(220, 200, 255, 0.2)", // 9月: 紫
+            10: "rgba(255, 210, 150, 0.2)", // 10月: 茶
+            11: "rgba(200, 220, 220, 0.2)", // 11月: グレー
+            12: "rgba(255, 255, 255, 0.2)"  // 12月: 白
+        };
 
         function showToast(msg) {
             const toast = document.getElementById('toast');
@@ -117,6 +130,13 @@
                     if(!row['内容']) return;
                     const card = document.createElement('div');
                     card.className = 'schedule-card';
+                    
+                    // 月に応じた背景色を適用
+                    const m = parseInt(row['月']);
+                    if (monthColors[m]) {
+                        card.style.backgroundColor = monthColors[m];
+                    }
+                    
                     card.innerHTML = `<div>${row['月']}/${row['日']} ${row['内容']}</div>`;
                     container.appendChild(card);
                 });
@@ -141,12 +161,9 @@
 
                     const card = document.createElement('div');
                     card.className = 'poll-card';
-                    // スマホのtouchstartイベントで強制的にスタイルを適用させるための空関数
                     card.ontouchstart = function(){};
                     card.innerHTML = `<div class="title-text">${title}</div>`;
-                    
                     card.onclick = function() { vote(title); };
-                    
                     container.appendChild(card);
                 });
             },
@@ -165,7 +182,7 @@
                 }
                 count = parseInt(localStorage.getItem('voteCount') || '0');
                 if (count >= MAX_VOTES) {
-                    showToast('本日の上限に達しました');
+                    showToast('１日１回よ('ω')ノ');
                     return;
                 }
             } catch(e) { }
