@@ -36,13 +36,12 @@
 
         .frame-middle {
             width: 100%;
-            /* lr.pngを縦にリピートさせ、枠を中身に合わせて伸ばす */
             background-image: url('lr.png');
             background-size: 100% auto;
             background-repeat: repeat-y; 
             padding: 0px 50px; 
             box-sizing: border-box;
-            min-height: 20px; /* 予定が少ない時も最低限の枠を維持 */
+            min-height: 20px;
         }
 
         .frame-bottom {
@@ -132,23 +131,15 @@
     <script>
         const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
 
-        // スプレッドシート（CSV）自体の最終更新時間を取得する関数
-        async function fetchSheetLastUpdated() {
-            try {
-                const response = await fetch(csvUrl, { method: 'HEAD' });
-                const lastModified = response.headers.get('Last-Modified');
-                if (lastModified) {
-                    const date = new Date(lastModified);
-                    const y = date.getFullYear();
-                    const m = date.getMonth() + 1;
-                    const d = date.getDate();
-                    const h = String(date.getHours()).padStart(2, '0');
-                    const min = String(date.getMinutes()).padStart(2, '0');
-                    document.getElementById('last-updated').innerText = `データ最終更新：${y}年${m}月${d}日 ${h}:${min}`;
-                }
-            } catch (e) {
-                console.log("更新日の取得に失敗しました");
-            }
+        // データを読み取った瞬間の日時を表示する関数
+        function updateDisplayTime() {
+            const date = new Date();
+            const y = date.getFullYear();
+            const m = date.getMonth() + 1;
+            const d = date.getDate();
+            const h = String(date.getHours()).padStart(2, '0');
+            const min = String(date.getMinutes()).padStart(2, '0');
+            document.getElementById('last-updated').innerText = `データ同期日時：${y}年${m}月${d}日 ${h}:${min}`;
         }
 
         Papa.parse(csvUrl, {
@@ -157,7 +148,7 @@
             skipEmptyLines: true, 
             complete: function(results) {
                 const container = document.getElementById('schedule-container');
-                fetchSheetLastUpdated(); // データの読み込み完了時に更新日を表示
+                updateDisplayTime(); // スケジュール表示が成功した時に時間を出す
 
                 try {
                     const data = results.data;
