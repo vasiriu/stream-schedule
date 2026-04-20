@@ -36,13 +36,12 @@
 
         .frame-middle {
             width: 100%;
-            /* lr.pngを縦にリピートさせ、枠を中身に合わせて伸ばす */
             background-image: url('lr.png');
             background-size: 100% auto;
             background-repeat: repeat-y; 
             padding: 0px 50px; 
             box-sizing: border-box;
-            min-height: 20px; /* 予定が少ない時も最低限の枠を維持 */
+            min-height: 20px;
         }
 
         .frame-bottom {
@@ -60,8 +59,8 @@
             gap: 15px;
         }
 
+        /* 背景色はJavaScript側で月ごとに上書きされるため、基本の形だけ設定 */
         .schedule-card {
-            background-color: rgba(0, 0, 0, 0.4); 
             border-radius: 8px;
             padding: 15px;
             display: flex;
@@ -90,19 +89,19 @@
             font-weight: bold;
         }
 
+        /* カレンダーボタンの縮小・絵文字化 */
         .calendar-btn {
-            background-color: #d98b2b;
-            color: white;
+            background: none;
             text-decoration: none;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: bold;
-            white-space: nowrap;
-            transition: background-color 0.2s;
+            font-size: 24px; /* 絵文字のサイズ */
+            padding: 5px;
+            transition: transform 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .calendar-btn:hover {
-            background-color: #c05028;
+            transform: scale(1.2); /* マウスを乗せると少し大きくなる */
         }
 
         #last-updated {
@@ -132,23 +131,30 @@
     <script>
         const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
 
-        // スプレッドシート（CSV）自体の最終更新時間を取得する関数
-        async function fetchSheetLastUpdated() {
-            try {
-                const response = await fetch(csvUrl, { method: 'HEAD' });
-                const lastModified = response.headers.get('Last-Modified');
-                if (lastModified) {
-                    const date = new Date(lastModified);
-                    const y = date.getFullYear();
-                    const m = date.getMonth() + 1;
-                    const d = date.getDate();
-                    const h = String(date.getHours()).padStart(2, '0');
-                    const min = String(date.getMinutes()).padStart(2, '0');
-                    document.getElementById('last-updated').innerText = `データ最終更新：${y}年${m}月${d}日 ${h}:${min}`;
-                }
-            } catch (e) {
-                console.log("更新日の取得に失敗しました");
-            }
+        // 月ごとのふんわりした背景色（rgbaの最後の数字が透明度。0.25で派手になりすぎないようにしています）
+        const monthColors = {
+            "1": "rgba(200, 230, 255, 0.25)", // 1月: 冬の青
+            "2": "rgba(220, 200, 255, 0.25)", // 2月: 紫
+            "3": "rgba(255, 200, 220, 0.25)", // 3月: 桃色
+            "4": "rgba(255, 220, 220, 0.25)", // 4月: 桜
+            "5": "rgba(200, 255, 200, 0.25)", // 5月: 新緑
+            "6": "rgba(200, 220, 255, 0.25)", // 6月: 水色
+            "7": "rgba(200, 255, 255, 0.25)", // 7月: 海
+            "8": "rgba(255, 230, 180, 0.25)", // 8月: ひまわり
+            "9": "rgba(255, 200, 150, 0.25)", // 9月: 紅葉
+            "10": "rgba(255, 180, 150, 0.25)",// 10月: ハロウィン
+            "11": "rgba(220, 200, 180, 0.25)",// 11月: 晩秋
+            "12": "rgba(255, 255, 200, 0.25)" // 12月: 星/雪
+        };
+
+        function updateDisplayTime() {
+            const date = new Date();
+            const y = date.getFullYear();
+            const m = date.getMonth() + 1;
+            const d = date.getDate();
+            const h = String(date.getHours()).padStart(2, '0');
+            const min = String(date.getMinutes()).padStart(2, '0');
+            document.getElementById('last-updated').innerText = `データ同期日時：${y}年${m}月${d}日 ${h}:${min}`;
         }
 
         Papa.parse(csvUrl, {
@@ -157,26 +163,52 @@
             skipEmptyLines: true, 
             complete: function(results) {
                 const container = document.getElementById('schedule-container');
-                fetchSheetLastUpdated(); // データの読み込み完了時に更新日を表示
+                updateDisplayTime(); 
 
                 try {
                     const data = results.data;
                     const currentYear = new Date().getFullYear();
+                    const now = new Date();
+                    
+                    // 今日の始まりの時刻（0時0分）を取得
+                    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime();
 
                     if (!data || data.length === 0) {
                         container.innerHTML = '<div class="loading">現在予定されている配信はありません。</div>';
                         return;
                     }
 
+                    // --- 1. 過去のスケジュールを省く処理 ---
+                    const validEvents = data.filter(row => {
+                        const month = String(row['月'] || '').trim();
+                        const day = String(row['日'] || '').trim();
+                        if (!month || !day) return false;
+
+                        // 予定の日付を作成
+                        const eventDate = new Date(currentYear, parseInt(month) - 1, parseInt(day), 0, 0, 0).getTime();
+                        
+                        // 予定日が今日の0時より前（＝昨日以前）なら非表示（false）
+                        if (eventDate < todayStart) {
+                            return false;
+                        }
+                        return true;
+                    });
+
+                    // --- 2. 最大5件までに絞る処理 ---
+                    const eventsToShow = validEvents.slice(0, 5);
+
+                    if (eventsToShow.length === 0) {
+                        container.innerHTML = '<div class="loading">これからの予定は順次追加されます！</div>';
+                        return;
+                    }
+
                     container.innerHTML = ''; 
 
-                    data.forEach(row => {
+                    eventsToShow.forEach(row => {
                         const month = String(row['月'] || '').trim();
                         const day = String(row['日'] || '').trim();
                         const time = String(row['時間'] || '').trim();
                         const title = String(row['内容'] || '').trim();
-
-                        if (!month || !day || !time || !title) return;
 
                         const timeMatch = time.match(/(\d{1,2}):(\d{2})/);
                         let calLink = "#";
@@ -197,14 +229,20 @@
                             calLink = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${formatGCalDate(startDate)}/${formatGCalDate(endDate)}&details=${encodeURIComponent("配信をお楽しみに！")}`;
                         }
 
+                        // 月から背景色を取得（未定義の場合はデフォルトの透明黒）
+                        const bgColor = monthColors[month] || "rgba(0, 0, 0, 0.4)";
+
                         const card = document.createElement('div');
                         card.className = 'schedule-card';
+                        // HTML側で直接背景色を流し込む
+                        card.style.backgroundColor = bgColor;
+
                         card.innerHTML = `
                             <div class="date-info">
                                 <div class="date-text"><span>${month}/${day}</span> ${time}</div>
                                 <div class="title-text">${title}</div>
                             </div>
-                            <a href="${calLink}" class="calendar-btn" target="_blank" rel="noopener noreferrer">カレンダー追加</a>
+                            <a href="${calLink}" class="calendar-btn" target="_blank" rel="noopener noreferrer" title="カレンダーに追加">📅</a>
                         `;
                         container.appendChild(card);
                     });
