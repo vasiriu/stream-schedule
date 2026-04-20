@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>配信スケジュール & アンケート</title>
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
     <style>
@@ -63,8 +63,6 @@
             display: flex; 
             flex-direction: column; 
             gap: 12px; 
-            position: relative;
-            z-index: 10;
         }
 
         .schedule-card, .poll-card {
@@ -76,11 +74,7 @@
             border-left: 4px solid #ffffff;
             background-color: rgba(255, 255, 255, 0.1);
             transition: all 0.2s;
-            cursor: pointer; 
-            position: relative;
-            z-index: 999; /* 重なり問題の解決 */
-            touch-action: manipulation;
-            -webkit-tap-highlight-color: rgba(255, 255, 255, 0.3);
+            cursor: pointer;
         }
 
         .poll-card:active {
@@ -88,7 +82,7 @@
             transform: scale(0.98);
         }
 
-        .title-text { font-size: 15px; font-weight: bold; pointer-events: none; }
+        .title-text { font-size: 15px; font-weight: bold; }
 
         #toast {
             position: fixed;
@@ -103,7 +97,6 @@
             display: none;
             z-index: 10000;
             border: 1px solid #a8a8ff;
-            text-align: center;
         }
 
         #last-updated { margin-top: 30px; font-size: 11px; color: #8888aa; text-align: center; }
@@ -128,13 +121,10 @@
     <div id="toast"></div>
 
     <script>
-        // ★重要：アンケート用スプレッドシートのURLを正しく設定してください
-        const scheduleCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
-        // アンケート用URL（前回の400エラーが起きていないURLをここに入れてください）
-        const pollCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?gid=204098939&single=true&output=csv';
-        
+        // 設定（URLをシンプルに修正）
+        const baseUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
+        const pollCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?gid=204098939&output=csv';
         const voteApiUrl = 'https://script.google.com/macros/s/AKfycbx_kwFNvHeXimdZayUctufH2o1Lbr5pHtBwYAYNMh7bT6XEs_pAHv_64aWrRJz5GF2T/exec';
-        const MAX_VOTES = 10;
 
         function showToast(msg) {
             const toast = document.getElementById('toast');
@@ -143,8 +133,8 @@
             setTimeout(() => { toast.style.display = 'none'; }, 3000);
         }
 
-        // スケジュール取得
-        Papa.parse(scheduleCsvUrl, {
+        // スケジュール
+        Papa.parse(baseUrl, {
             download: true, header: true, skipEmptyLines: true,
             complete: function(results) {
                 const container = document.getElementById('schedule-container');
@@ -160,13 +150,12 @@
             }
         });
 
-        // アンケート取得
+        // アンケート（ここがエラーになっていたので修正）
         Papa.parse(pollCsvUrl, {
             download: true, header: true, skipEmptyLines: true,
             complete: function(results) {
                 const container = document.getElementById('poll-container');
                 container.innerHTML = '';
-                
                 results.data.forEach(row => {
                     const title = row['タイトル'] || row[Object.keys(row)[0]];
                     if (!title || title.trim() === "") return;
@@ -174,12 +163,7 @@
                     const card = document.createElement('div');
                     card.className = 'poll-card';
                     card.innerHTML = `<div class="title-text">${title}</div>`;
-                    
-                    // スマホ・PC両対応のクリック登録
-                    card.onclick = function() {
-                        vote(title);
-                    };
-                    
+                    card.onclick = function() { vote(title); };
                     container.appendChild(card);
                 });
             },
@@ -189,32 +173,10 @@
         });
 
         function vote(title) {
-            let count = 0;
-            const today = new Date().toLocaleDateString();
-            
-            try {
-                if (localStorage.getItem('lastDate') !== today) {
-                    localStorage.setItem('voteCount', '0');
-                    localStorage.setItem('lastDate', today);
-                }
-                count = parseInt(localStorage.getItem('voteCount') || '0');
-                if (count >= MAX_VOTES) {
-                    showToast('本日の上限（10回）に達しました');
-                    return;
-                }
-            } catch(e) {}
-
-            showToast(title + ' に投票中...');
-            
+            showToast(title + ' に投票しています...');
             fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, { mode: 'no-cors' })
-            .then(() => {
-                count++;
-                try { localStorage.setItem('voteCount', count.toString()); } catch(e){}
-                showToast('投票完了！ (今日' + count + '回目)');
-            })
-            .catch(() => {
-                showToast('送信エラー');
-            });
+            .then(() => { showToast('投票完了！'); })
+            .catch(() => { showToast('送信エラー'); });
         }
     </script>
 </body>
