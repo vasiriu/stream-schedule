@@ -23,22 +23,15 @@
             margin: 0 auto; 
             display: flex;
             flex-direction: column;
-            position: relative; /* 重なり判定のために追加 */
         }
 
         .frame-top { width: 100%; aspect-ratio: 1152 / 216; background-image: url('top.png'); background-size: 100% 100%; background-repeat: no-repeat; flex-shrink: 0; }
-        .frame-middle { width: 100%; background-image: url('lr.png'); background-size: 100% auto; background-repeat: repeat-y; padding: 0px 50px; box-sizing: border-box; position: relative; z-index: 1; }
+        .frame-middle { width: 100%; background-image: url('lr.png'); background-size: 100% auto; background-repeat: repeat-y; padding: 0px 50px; box-sizing: border-box; }
         .frame-bottom { width: 100%; aspect-ratio: 1152 / 43; background-image: url('foot.png'); background-size: 100% 100%; background-repeat: no-repeat; flex-shrink: 0; }
 
         .section-title { text-align: center; font-size: 18px; font-weight: bold; margin: 10px 0 20px 0; color: #a8a8ff; text-decoration: underline; }
 
-        #schedule-container, #poll-container { 
-            display: flex; 
-            flex-direction: column; 
-            gap: 12px; 
-            position: relative;
-            z-index: 10; /* コンテンツを手前に */
-        }
+        #schedule-container, #poll-container { display: flex; flex-direction: column; gap: 12px; }
 
         .schedule-card, .poll-card {
             border-radius: 8px;
@@ -51,8 +44,6 @@
             transition: all 0.2s;
             cursor: pointer;
             user-select: none;
-            position: relative;
-            z-index: 100; /* スマホでのタップを確実にするため */
         }
 
         .poll-card:active {
@@ -65,8 +56,6 @@
         #toast {
             position: fixed;
             bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
             background: rgba(0, 0, 0, 0.8);
             color: white;
             padding: 10px 20px;
@@ -75,7 +64,6 @@
             display: none;
             z-index: 10000;
             border: 1px solid #a8a8ff;
-            white-space: nowrap;
         }
 
         #last-updated { margin-top: 30px; font-size: 11px; color: #8888aa; text-align: center; }
@@ -90,7 +78,7 @@
             <div class="section-title">STREAM SCHEDULE</div>
             <div id="schedule-container"><div class="loading">読み込み中...</div></div>
 
-            <div class="section-title" style="margin-top: 40px;">NEXT GAME POLL</div>
+            <div class="section-title" style="margin-top: 40px;">NEXT E POLL</div>
             <div id="poll-container"><div class="loading">読み込み中...</div></div>
         </div>
         <div class="frame-bottom"></div>
@@ -100,6 +88,7 @@
     <div id="toast"></div>
 
     <script>
+        // URL設定（ご提示いただいた動くコードの記述を完全に踏襲）
         const csvUrlBase = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
         const pollCsvUrl = csvUrlBase + '&gid=204098939'; 
         const voteApiUrl = 'https://script.google.com/macros/s/AKfycbx_kwFNvHeXimdZayUctufH2o1Lbr5pHtBwYAYNMh7bT6XEs_pAHv_64aWrRJz5GF2T/exec';
@@ -126,7 +115,7 @@
                     card.innerHTML = `<div>${row['月']}/${row['日']} ${row['内容']}</div>`;
                     container.appendChild(card);
                 });
-                document.getElementById('last-updated').innerText = `最終：${new Date().toLocaleString()}`;
+                document.getElementById('last-updated').innerText = `更新：${new Date().toLocaleString()}`;
             }
         });
 
@@ -156,7 +145,7 @@
                 });
             },
             error: function() {
-                document.getElementById('poll-container').innerHTML = '<div class="loading">データの読み込みに失敗しました</div>';
+                document.getElementById('poll-container').innerHTML = '<div class="loading">CSVの読み込みに失敗しました(gidを確認)</div>';
             }
         });
 
@@ -170,7 +159,7 @@
                 }
                 count = parseInt(localStorage.getItem('voteCount') || '0');
                 if (count >= MAX_VOTES) {
-                    showToast('本日の上限（10回）に達しました');
+                    showToast('本日の上限に達しました');
                     return;
                 }
             } catch(e) { }
@@ -184,7 +173,7 @@
                 showToast('投票完了！ (今日' + count + '回目)');
             })
             .catch(() => {
-                showToast('エラーが発生しました');
+                showToast('送信エラーが発生しました');
             });
         }
     </script>
