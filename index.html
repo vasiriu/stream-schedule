@@ -66,7 +66,6 @@
             border: 1px solid #a8a8ff;
         }
 
-        #last-updated { margin-top: 30px; font-size: 11px; color: #8888aa; text-align: center; }
         .loading { text-align: center; padding: 20px; font-size: 14px; }
     </style>
 </head>
@@ -75,25 +74,23 @@
     <div class="schedule-frame">
         <div class="frame-top"></div>
         <div class="frame-middle">
-            <div class="section-title">STREAM SCHEDULE</div>
+            <div class="section-title">STREAM</div>
             <div id="schedule-container"><div class="loading">読み込み中...</div></div>
 
-            <div class="section-title" style="margin-top: 40px;">NEXT E POLL</div>
+            <div class="section-title" style="margin-top: 40px;">NEXT</div>
             <div id="poll-container"><div class="loading">読み込み中...</div></div>
         </div>
         <div class="frame-bottom"></div>
     </div>
 
-    <div id="last-updated"></div>
     <div id="toast"></div>
 
     <script>
-        // URL設定（ご提示いただいた動くコードの記述を完全に踏襲）
         const csvUrlBase = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
-        const pollCsvUrl = csvUrlBase + '&gid=504323171'; 
+        const pollCsvUrl = csvUrlBase + '&gid=204098939'; 
         const voteApiUrl = 'https://script.google.com/macros/s/AKfycbx_kwFNvHeXimdZayUctufH2o1Lbr5pHtBwYAYNMh7bT6XEs_pAHv_64aWrRJz5GF2T/exec';
         
-        const MAX_VOTES = 10;
+        const MAX_VOTES = 5;
 
         function showToast(msg) {
             const toast = document.getElementById('toast');
@@ -115,7 +112,6 @@
                     card.innerHTML = `<div>${row['月']}/${row['日']} ${row['内容']}</div>`;
                     container.appendChild(card);
                 });
-                document.getElementById('last-updated').innerText = `更新：${new Date().toLocaleString()}`;
             }
         });
 
@@ -138,14 +134,9 @@
                     const card = document.createElement('div');
                     card.className = 'poll-card';
                     card.innerHTML = `<div class="title-text">${title}</div>`;
-                    
                     card.onclick = function() { vote(title); };
-                    
                     container.appendChild(card);
                 });
-            },
-            error: function() {
-                document.getElementById('poll-container').innerHTML = '<div class="loading">CSVの読み込みに失敗しました(gidを確認)</div>';
             }
         });
 
@@ -163,17 +154,17 @@
                     return;
                 }
             } catch(e) { }
-
-            showToast(title + ' に投票中...');
             
+            // 投票中の表示は削除し、バックグラウンドで処理
             fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, { mode: 'no-cors' })
             .then(() => {
                 count++;
                 try { localStorage.setItem('voteCount', count.toString()); } catch(e){}
-                showToast('投票完了！ (今日' + count + '回目)');
+                // 完了時のメッセージも不要とのことなので非表示
             })
             .catch(() => {
-                showToast('送信エラーが発生しました');
+                // エラー時のみ通知
+                showToast('エラーが発生しました');
             });
         }
     </script>
