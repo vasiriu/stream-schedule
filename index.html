@@ -85,10 +85,10 @@
     <div class="schedule-frame">
         <div class="frame-top"></div>
         <div class="frame-middle">
-            <div class="section-title">スケジュール</div>
+            <div class="section-title">STREAM SCHEDULE</div>
             <div id="schedule-container"><div class="loading">読み込み中...</div></div>
 
-            <div class="section-title" style="margin-top: 40px;">次やってほしいのは？</div>
+            <div class="section-title" style="margin-top: 40px;">NEXT GAME POLL</div>
             <div id="poll-container"><div class="loading">読み込み中...</div></div>
         </div>
         <div class="frame-bottom"></div>
@@ -101,7 +101,7 @@
         const pollCsvUrl = csvUrlBase + '&gid=504323171'; 
         const voteApiUrl = 'https://script.google.com/macros/s/AKfycbx_kwFNvHeXimdZayUctufH2o1Lbr5pHtBwYAYNMh7bT6XEs_pAHv_64aWrRJz5GF2T/exec';
         
-        const MAX_VOTES = 100;
+        const MAX_VOTES = 10;
 
         const monthColors = {
             1: "rgba(200, 230, 255, 0.2)", 2: "rgba(255, 200, 230, 0.2)", 
@@ -184,7 +184,7 @@
                 }
                 count = parseInt(localStorage.getItem('voteCount') || '0');
                 if (count >= MAX_VOTES) {
-                    showToast('1日1回よ('ω')');
+                    showToast('本日の上限（10回）に達しました');
                     return;
                 }
             } catch(e) { }
