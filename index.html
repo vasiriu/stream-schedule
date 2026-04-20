@@ -18,31 +18,40 @@
         }
         
         /* -----------------------------------
-           3パーツ構成の枠デザイン（画像有効化済み）
+           3パーツ構成の枠デザイン（比率自動計算版）
            ----------------------------------- */
         .schedule-frame {
             width: 100%;
-            max-width: 500px;
+            max-width: 500px; /* ここがスマホ等での最大幅になります */
             margin: 0 auto; 
         }
 
         .frame-top {
-            height: 60px; /* top.png の高さに合わせて調整してください */
-            background-image: url('top.png'); /* 画像を有効にしました */
+            width: 100%;
+            /* top.pngの比率（1152:216）を維持して絶対に潰さない */
+            aspect-ratio: 1152 / 216; 
+            background-image: url('top.png');
             background-size: 100% 100%;
             background-repeat: no-repeat;
         }
 
         .frame-middle {
-            background-image: url('lr.png'); /* 左右の画像を有効にしました */
+            width: 100%;
+            background-image: url('lr.png');
             background-size: 100% auto;
-            background-repeat: repeat-y; /* 縦方向に繰り返して伸びる設定です */
-            padding: 20px 40px; 
+            background-repeat: repeat-y; /* 縦にだけ画像を繰り返して伸ばす */
+            
+            /* 枠線の内側に文字が収まるように余白を調整 
+               （横幅1152pxの画像に合わせて、左右の余白を多めに取っています） */
+            padding: 10px 50px; 
+            box-sizing: border-box; /* 余白を含めて幅を計算する設定 */
         }
 
         .frame-bottom {
-            height: 60px; /* foot.png の高さに合わせて調整してください */
-            background-image: url('foot.png'); /* 画像を有効にしました */
+            width: 100%;
+            /* foot.pngの比率（1152:43）を維持して絶対に潰さない */
+            aspect-ratio: 1152 / 43; 
+            background-image: url('foot.png');
             background-size: 100% 100%;
             background-repeat: no-repeat;
         }
@@ -135,7 +144,6 @@
     <div class="schedule-frame">
         <div class="frame-top"></div>
         <div class="frame-middle">
-            <div class="schedule-header">スケジュール</div>
             <div id="schedule-container">
                 <div class="loading">スケジュールを読み込み中...</div>
             </div>
