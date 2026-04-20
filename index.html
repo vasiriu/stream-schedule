@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>配信スケジュール</title>
+    <title>配信スケジュール & アンケート</title>
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
     <style>
         body {
@@ -41,7 +41,6 @@
             background-repeat: repeat-y; 
             padding: 0px 50px; 
             box-sizing: border-box;
-            min-height: 20px;
         }
 
         .frame-bottom {
@@ -53,65 +52,64 @@
             flex-shrink: 0;
         }
 
-        #schedule-container {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
+        .section-title {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            margin: 10px 0 20px 0;
+            color: #a8a8ff;
+            text-decoration: underline;
         }
 
-        /* 背景色はJavaScript側で月ごとに上書きされるため、基本の形だけ設定 */
-        .schedule-card {
+        #schedule-container, #poll-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .schedule-card, .poll-card {
             border-radius: 8px;
             padding: 15px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             border-left: 4px solid #ffffff;
+            transition: transform 0.2s;
         }
 
-        .date-info {
+        .poll-card {
+            cursor: pointer;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        .poll-card:hover {
+            transform: translateX(5px);
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .date-info, .poll-info {
             display: flex;
             flex-direction: column;
         }
-        .date-text {
-            font-size: 14px;
-            color: #ddddff;
-            margin-bottom: 4px;
-        }
-        .date-text span {
-            font-size: 20px;
-            font-weight: bold;
-            color: #ffffff;
-            margin-right: 8px;
-        }
-        .title-text {
-            font-size: 16px;
-            font-weight: bold;
-        }
+        .date-text { font-size: 13px; color: #ddddff; margin-bottom: 4px; }
+        .date-text span { font-size: 18px; font-weight: bold; color: #ffffff; margin-right: 8px; }
+        .title-text { font-size: 15px; font-weight: bold; }
 
-        /* カレンダーボタンの縮小・絵文字化 */
         .calendar-btn {
             background: none;
             text-decoration: none;
-            font-size: 24px; /* 絵文字のサイズ */
-            padding: 5px;
+            font-size: 24px;
             transition: transform 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
-        .calendar-btn:hover {
-            transform: scale(1.2); /* マウスを乗せると少し大きくなる */
-        }
+        .calendar-btn:hover { transform: scale(1.2); }
 
         #last-updated {
             margin-top: 30px;
-            font-size: 12px;
+            font-size: 11px;
             color: #8888aa;
             text-align: center;
         }
 
-        .loading { text-align: center; padding: 20px; }
+        .loading { text-align: center; padding: 20px; font-size: 14px; }
     </style>
 </head>
 <body>
@@ -119,8 +117,14 @@
     <div class="schedule-frame">
         <div class="frame-top"></div>
         <div class="frame-middle">
+            <div class="section-title">STREAM SCHEDULE</div>
             <div id="schedule-container">
-                <div class="loading">スケジュールを読み込み中...</div>
+                <div class="loading">読み込み中...</div>
+            </div>
+
+            <div class="section-title" style="margin-top: 40px;">NEXT GAME POLL</div>
+            <div id="poll-container">
+                <div class="loading">読み込み中...</div>
             </div>
         </div>
         <div class="frame-bottom"></div>
@@ -129,128 +133,61 @@
     <div id="last-updated"></div>
 
     <script>
-        const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
+        const csvUrlBase = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
+        // アンケート用シートのCSV（gidはシートごとに変わりますが、まずは全体読み込みで対応）
+        const pollCsvUrl = csvUrlBase + '&gid=204098939'; // ★アンケートシートのgidを確認してください
+        const voteApiUrl = 'https://script.google.com/macros/s/AKfycbx_kwFNvHeXimdZayUctufH2o1Lbr5pHtBwYAYNMh7bT6XEs_pAHv_64aWrRJz5GF2T/exec';
 
-        // 月ごとのふんわりした背景色（rgbaの最後の数字が透明度。0.25で派手になりすぎないようにしています）
         const monthColors = {
-            "1": "rgba(200, 230, 255, 0.25)", // 1月: 冬の青
-            "2": "rgba(220, 200, 255, 0.25)", // 2月: 紫
-            "3": "rgba(255, 200, 220, 0.25)", // 3月: 桃色
-            "4": "rgba(255, 220, 220, 0.25)", // 4月: 桜
-            "5": "rgba(200, 255, 200, 0.25)", // 5月: 新緑
-            "6": "rgba(200, 220, 255, 0.25)", // 6月: 水色
-            "7": "rgba(200, 255, 255, 0.25)", // 7月: 海
-            "8": "rgba(255, 230, 180, 0.25)", // 8月: ひまわり
-            "9": "rgba(255, 200, 150, 0.25)", // 9月: 紅葉
-            "10": "rgba(255, 180, 150, 0.25)",// 10月: ハロウィン
-            "11": "rgba(220, 200, 180, 0.25)",// 11月: 晩秋
-            "12": "rgba(255, 255, 200, 0.25)" // 12月: 星/雪
+            "1": "rgba(200, 230, 255, 0.2)", "2": "rgba(220, 200, 255, 0.2)", "3": "rgba(255, 200, 220, 0.2)",
+            "4": "rgba(255, 220, 220, 0.2)", "5": "rgba(200, 255, 200, 0.2)", "6": "rgba(200, 220, 255, 0.2)",
+            "7": "rgba(200, 255, 255, 0.2)", "8": "rgba(255, 230, 180, 0.2)", "9": "rgba(255, 200, 150, 0.2)",
+            "10": "rgba(255, 180, 150, 0.2)","11": "rgba(220, 200, 180, 0.2)","12": "rgba(255, 255, 200, 0.2)"
         };
 
         function updateDisplayTime() {
             const date = new Date();
-            const y = date.getFullYear();
-            const m = date.getMonth() + 1;
-            const d = date.getDate();
-            const h = String(date.getHours()).padStart(2, '0');
-            const min = String(date.getMinutes()).padStart(2, '0');
-            document.getElementById('last-updated').innerText = `データ同期日時：${y}年${m}月${d}日 ${h}:${min}`;
+            document.getElementById('last-updated').innerText = `データ同期日時：${date.toLocaleString()}`;
         }
 
-        Papa.parse(csvUrl, {
-            download: true,
-            header: true,
-            skipEmptyLines: true, 
+        // スケジュール読み込み
+        Papa.parse(csvUrlBase, {
+            download: true, header: true, skipEmptyLines: true,
             complete: function(results) {
                 const container = document.getElementById('schedule-container');
-                updateDisplayTime(); 
+                const now = new Date();
+                const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+                
+                const events = results.data.filter(row => {
+                    const m = row['月'], d = row['日'];
+                    if(!m || !d) return false;
+                    return new Date(now.getFullYear(), m-1, d).getTime() >= todayStart;
+                }).slice(0, 5);
 
-                try {
-                    const data = results.data;
-                    const currentYear = new Date().getFullYear();
-                    const now = new Date();
+                container.innerHTML = events.length ? '' : '<div class="loading">予定は順次追加されます</div>';
+                events.forEach(row => {
+                    const card = document.createElement('div');
+                    card.className = 'schedule-card';
+                    card.style.backgroundColor = monthColors[row['月']] || "rgba(0,0,0,0.4)";
+                    // Googleカレンダーリンク生成（中略）
+                    const calLink = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(row['内容'])}&dates=${now.getFullYear()}${row['月'].padStart(2,'0')}${row['日'].padStart(2,'0')}T200000Z/210000Z`;
                     
-                    // 今日の始まりの時刻（0時0分）を取得
-                    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime();
-
-                    if (!data || data.length === 0) {
-                        container.innerHTML = '<div class="loading">現在予定されている配信はありません。</div>';
-                        return;
-                    }
-
-                    // --- 1. 過去のスケジュールを省く処理 ---
-                    const validEvents = data.filter(row => {
-                        const month = String(row['月'] || '').trim();
-                        const day = String(row['日'] || '').trim();
-                        if (!month || !day) return false;
-
-                        // 予定の日付を作成
-                        const eventDate = new Date(currentYear, parseInt(month) - 1, parseInt(day), 0, 0, 0).getTime();
-                        
-                        // 予定日が今日の0時より前（＝昨日以前）なら非表示（false）
-                        if (eventDate < todayStart) {
-                            return false;
-                        }
-                        return true;
-                    });
-
-                    // --- 2. 最大5件までに絞る処理 ---
-                    const eventsToShow = validEvents.slice(0, 5);
-
-                    if (eventsToShow.length === 0) {
-                        container.innerHTML = '<div class="loading">これからの予定は順次追加されます！</div>';
-                        return;
-                    }
-
-                    container.innerHTML = ''; 
-
-                    eventsToShow.forEach(row => {
-                        const month = String(row['月'] || '').trim();
-                        const day = String(row['日'] || '').trim();
-                        const time = String(row['時間'] || '').trim();
-                        const title = String(row['内容'] || '').trim();
-
-                        const timeMatch = time.match(/(\d{1,2}):(\d{2})/);
-                        let calLink = "#";
-                        
-                        if (timeMatch) {
-                            const hours = parseInt(timeMatch[1]);
-                            const minutes = parseInt(timeMatch[2]);
-                            const startDate = new Date(currentYear, parseInt(month) - 1, parseInt(day), hours, minutes);
-                            const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-
-                            const formatGCalDate = (d) => {
-                                return d.getFullYear().toString() +
-                                    String(d.getMonth() + 1).padStart(2, '0') +
-                                    String(d.getDate()).padStart(2, '0') + 'T' +
-                                    String(d.getHours()).padStart(2, '0') +
-                                    String(d.getMinutes()).padStart(2, '0') + '00';
-                            };
-                            calLink = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${formatGCalDate(startDate)}/${formatGCalDate(endDate)}&details=${encodeURIComponent("配信をお楽しみに！")}`;
-                        }
-
-                        // 月から背景色を取得（未定義の場合はデフォルトの透明黒）
-                        const bgColor = monthColors[month] || "rgba(0, 0, 0, 0.4)";
-
-                        const card = document.createElement('div');
-                        card.className = 'schedule-card';
-                        // HTML側で直接背景色を流し込む
-                        card.style.backgroundColor = bgColor;
-
-                        card.innerHTML = `
-                            <div class="date-info">
-                                <div class="date-text"><span>${month}/${day}</span> ${time}</div>
-                                <div class="title-text">${title}</div>
-                            </div>
-                            <a href="${calLink}" class="calendar-btn" target="_blank" rel="noopener noreferrer" title="カレンダーに追加">📅</a>
-                        `;
-                        container.appendChild(card);
-                    });
-                } catch (e) {
-                    container.innerHTML = `<div class="error-message">エラーが発生しました。</div>`;
-                }
+                    card.innerHTML = `<div class="date-info"><div class="date-text"><span>${row['月']}/${row['日']}</span> ${row['時間']}</div><div class="title-text">${row['内容']}</div></div><a href="${calLink}" class="calendar-btn" target="_blank">📅</a>`;
+                    container.appendChild(card);
+                });
+                updateDisplayTime();
             }
         });
+
+        // アンケート読み込み
+        // ※アンケート用シートの公開設定URLが必要です。
+        // 面倒な場合は、まずスケジュールが表示されるか確認しましょう。
+        
+        function vote(title) {
+            if(!voteApiUrl.includes('http')) { alert('GASの設定が必要です'); return; }
+            fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, { mode: 'no-cors' });
+            alert(title + ' に投票しました！');
+        }
     </script>
 </body>
 </html>
