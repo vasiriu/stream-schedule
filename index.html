@@ -79,10 +79,10 @@
     <div class="schedule-frame">
         <div class="frame-top"></div>
         <div class="frame-middle">
-            <div class="section-title">スケジュール</div>
+            <div class="section-title">STREAM SCHEDULE</div>
             <div id="schedule-container"><div class="loading">読み込み中...</div></div>
 
-            <div class="section-title" style="margin-top: 40px;">次やってほしいのは？</div>
+            <div class="section-title" style="margin-top: 40px;">NEXT GAME POLL</div>
             <div id="poll-container"><div class="loading">読み込み中...</div></div>
         </div>
         <div class="frame-bottom"></div>
@@ -182,7 +182,7 @@
                 }
                 count = parseInt(localStorage.getItem('voteCount') || '0');
                 if (count >= MAX_VOTES) {
-                    showToast('１日１回よ('ω')ノ');
+                    showToast('本日の上限（10回）に達しました');
                     return;
                 }
             } catch(e) { }
