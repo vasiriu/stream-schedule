@@ -17,55 +17,41 @@
             align-items: center;
         }
         
-        /* -----------------------------------
-           3パーツ構成の枠デザイン（比率自動計算版）
-           ----------------------------------- */
         .schedule-frame {
             width: 100%;
-            max-width: 500px; /* ここがスマホ等での最大幅になります */
+            max-width: 500px;
             margin: 0 auto; 
+            display: flex;
+            flex-direction: column;
         }
 
         .frame-top {
             width: 100%;
-            /* top.pngの比率（1152:216）を維持して絶対に潰さない */
             aspect-ratio: 1152 / 216; 
             background-image: url('top.png');
             background-size: 100% 100%;
             background-repeat: no-repeat;
+            flex-shrink: 0;
         }
 
         .frame-middle {
             width: 100%;
+            /* lr.pngを縦にリピートさせ、枠を中身に合わせて伸ばす */
             background-image: url('lr.png');
             background-size: 100% auto;
-            background-repeat: repeat-y; /* 縦にだけ画像を繰り返して伸ばす */
-            
-            /* 枠線の内側に文字が収まるように余白を調整 
-               （横幅1152pxの画像に合わせて、左右の余白を多めに取っています） */
-            padding: 10px 50px; 
-            box-sizing: border-box; /* 余白を含めて幅を計算する設定 */
+            background-repeat: repeat-y; 
+            padding: 0px 50px; 
+            box-sizing: border-box;
+            min-height: 20px; /* 予定が少ない時も最低限の枠を維持 */
         }
 
         .frame-bottom {
             width: 100%;
-            /* foot.pngの比率（1152:43）を維持して絶対に潰さない */
             aspect-ratio: 1152 / 43; 
             background-image: url('foot.png');
             background-size: 100% 100%;
             background-repeat: no-repeat;
-        }
-
-        /* -----------------------------------
-           中身のデザイン
-           ----------------------------------- */
-        .schedule-header {
-            text-align: center;
-            font-size: 28px;
-            font-weight: bold;
-            margin-bottom: 20px;
-            color: #ffffff;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            flex-shrink: 0;
         }
 
         #schedule-container {
@@ -119,7 +105,6 @@
             background-color: #c05028;
         }
 
-        /* 最終更新日の表示スタイル */
         #last-updated {
             margin-top: 30px;
             font-size: 12px;
@@ -127,16 +112,7 @@
             text-align: center;
         }
 
-        .loading, .error-message {
-            text-align: center;
-            padding: 10px;
-        }
-        .error-message {
-            color: #ff8888;
-            background-color: rgba(255, 0, 0, 0.1);
-            border-radius: 8px;
-            font-size: 14px;
-        }
+        .loading { text-align: center; padding: 20px; }
     </style>
 </head>
 <body>
@@ -156,17 +132,24 @@
     <script>
         const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
 
-        // 最終更新日を自動表示する処理
-        function displayLastUpdated() {
-            const date = new Date(document.lastModified);
-            const y = date.getFullYear();
-            const m = date.getMonth() + 1;
-            const d = date.getDate();
-            const h = String(date.getHours()).padStart(2, '0');
-            const min = String(date.getMinutes()).padStart(2, '0');
-            document.getElementById('last-updated').innerText = `最終更新：${y}年${m}月${d}日 ${h}:${min}`;
+        // スプレッドシート（CSV）自体の最終更新時間を取得する関数
+        async function fetchSheetLastUpdated() {
+            try {
+                const response = await fetch(csvUrl, { method: 'HEAD' });
+                const lastModified = response.headers.get('Last-Modified');
+                if (lastModified) {
+                    const date = new Date(lastModified);
+                    const y = date.getFullYear();
+                    const m = date.getMonth() + 1;
+                    const d = date.getDate();
+                    const h = String(date.getHours()).padStart(2, '0');
+                    const min = String(date.getMinutes()).padStart(2, '0');
+                    document.getElementById('last-updated').innerText = `データ最終更新：${y}年${m}月${d}日 ${h}:${min}`;
+                }
+            } catch (e) {
+                console.log("更新日の取得に失敗しました");
+            }
         }
-        displayLastUpdated();
 
         Papa.parse(csvUrl, {
             download: true,
@@ -174,6 +157,8 @@
             skipEmptyLines: true, 
             complete: function(results) {
                 const container = document.getElementById('schedule-container');
+                fetchSheetLastUpdated(); // データの読み込み完了時に更新日を表示
+
                 try {
                     const data = results.data;
                     const currentYear = new Date().getFullYear();
@@ -186,17 +171,12 @@
                     container.innerHTML = ''; 
 
                     data.forEach(row => {
-                        const rawMonth = row['月'] || '';
-                        const rawDay = row['日'] || '';
-                        const rawTime = row['時間'] || '';
-                        const rawTitle = row['内容'] || '';
+                        const month = String(row['月'] || '').trim();
+                        const day = String(row['日'] || '').trim();
+                        const time = String(row['時間'] || '').trim();
+                        const title = String(row['内容'] || '').trim();
 
-                        if (!rawMonth || !rawDay || !rawTime || !rawTitle) return;
-
-                        const month = String(rawMonth).trim();
-                        const day = String(rawDay).trim();
-                        const time = String(rawTime).trim();
-                        const title = String(rawTitle).trim();
+                        if (!month || !day || !time || !title) return;
 
                         const timeMatch = time.match(/(\d{1,2}):(\d{2})/);
                         let calLink = "#";
@@ -214,10 +194,7 @@
                                     String(d.getHours()).padStart(2, '0') +
                                     String(d.getMinutes()).padStart(2, '0') + '00';
                             };
-
-                            const startStr = formatGCalDate(startDate);
-                            const endStr = formatGCalDate(endDate);
-                            calLink = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${startStr}/${endStr}&details=${encodeURIComponent("配信をお楽しみに！")}`;
+                            calLink = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${formatGCalDate(startDate)}/${formatGCalDate(endDate)}&details=${encodeURIComponent("配信をお楽しみに！")}`;
                         }
 
                         const card = document.createElement('div');
@@ -232,7 +209,7 @@
                         container.appendChild(card);
                     });
                 } catch (e) {
-                    container.innerHTML = `<div class="error-message">内部エラー: ${e.message}</div>`;
+                    container.innerHTML = `<div class="error-message">エラーが発生しました。</div>`;
                 }
             }
         });
