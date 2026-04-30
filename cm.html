@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>トモコレ・リスナーキャラメイク</title>
+    <style>
+        :root { --primary: #ff9d00; --bg: #fff9f0; }
+        body { font-family: "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: #444; display: flex; justify-content: center; padding: 20px; }
+        .container { background: white; width: 100%; max-width: 500px; padding: 30px 20px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center; }
+        .progress-bar { height: 6px; background: #eee; border-radius: 3px; margin-bottom: 25px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--primary); transition: width 0.3s; width: 0%; }
+        h2 { font-size: 1.3rem; margin-bottom: 15px; color: #333; }
+        p { font-size: 0.9rem; color: #666; margin-bottom: 20px; }
+        .step { display: none; }
+        .step.active { display: block; animation: fadeIn 0.4s ease-out; }
+        .image-viewer { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-bottom: 20px; }
+        .image-viewer img { max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .select-group { display: flex; flex-direction: column; gap: 15px; align-items: center; margin-bottom: 25px; }
+        .select-item { display: flex; align-items: center; gap: 10px; width: 85%; justify-content: space-between; }
+        select, input[type="text"] { padding: 12px; border: 2px solid #eee; border-radius: 10px; font-size: 1rem; width: 160px; outline: none; background: white; }
+        .input-full { width: 85% !important; }
+        button { background: var(--primary); color: white; border: none; padding: 12px 40px; border-radius: 30px; font-weight: bold; cursor: pointer; }
+        #summary { text-align: left; background: #f9f9f9; padding: 15px; border-radius: 10px; font-size: 0.85rem; line-height: 1.6; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+    
+    <div id="survey">
+        <div class="step active" id="step0">
+            <h2>あなたの名前</h2>
+            <p>Miiのニックネームになります</p>
+            <input type="text" id="userName" class="input-full" placeholder="例：るいう" required>
+            <div style="margin-top:20px;"><button onclick="moveStep(1)">次へ</button></div>
+        </div>
+
+        <div id="dynamicSteps"></div>
+
+        <div class="step" id="step7">
+            <h2>詳細設定 (G1)</h2>
+            <div class="image-viewer"><img src="G1.png"></div>
+            <p>表の数字(1〜5)を選んでね</p>
+            <div class="select-group">
+                <div class="select-item"><span>1. 身長:</span><select id="g1"></select></div>
+                <div class="select-item"><span>2. 年齢:</span><select id="g2"></select></div>
+                <div class="select-item"><span>3. 性別:</span><select id="g3"></select></div>
+                <div class="select-item"><span>4. 恋愛対象:</span><select id="g4"></select></div>
+                <div class="select-item"><span>5. 髪色:</span><select id="g5"></select></div>
+            </div>
+            <div style="margin-top:20px;"><button onclick="moveStep(8)">最終確認へ</button></div>
+        </div>
+
+        <div class="step" id="step8">
+            <h2>この内容で送信するよ！</h2>
+            <div id="summary"></div>
+            <div style="margin-top:20px;"><button id="submitBtn" onclick="sendData()">送信する！</button></div>
+        </div>
+
+        <div class="step" id="stepThanks">
+            <h2>送信完了！</h2>
+            <p>回答ありがとう！<br>Miiになるのを楽しみにしててね！</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    const single = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+    const double = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map(char => char + char);
+    const allRows = [...single, ...double]; 
+
+    // ★指示通りにラベルと範囲を修正
+    const partsConfig = [
+        { name: "輪郭", imgs: ["A1.png"], start: "B", end: "E" }, // A
+        { name: "目", imgs: ["B1.png", "B2.png", "B3.png"], start: "B", end: "P" }, // B
+        { name: "鼻", imgs: ["C1.png"], start: "B", end: "F" }, // C
+        { name: "口", imgs: ["D1.png"], start: "B", end: "F" }, // D
+        { name: "眉毛", imgs: ["E1.png", "E2.png"], start: "B", end: "K" }, // E
+        { name: "髪型", imgs: ["F1.png","F2.png","F3.png","F4.png","F5.png","F6.png","F7.png","F8.png","F9.png"], start: "B", end: "TT" } // F
+    ];
+
+    const selections = [];
+    let currentIdx = 0;
+    const gasUrl = "https://script.google.com/macros/s/AKfycbwaZklrl3MdRTv00rfmYmxAGpK7kDBEpCWdwNrhFqIg0Exzm4oDQ9_LAasKJ1gZBw_p/exec";
+
+    const dynamicContainer = document.getElementById('dynamicSteps');
+    partsConfig.forEach((part, i) => {
+        const div = document.createElement('div');
+        div.className = 'step';
+        div.id = `step${i + 1}`;
+        
+        const startIndex = allRows.indexOf(part.start);
+        const endIndex = allRows.indexOf(part.end);
+        const partRows = allRows.slice(startIndex, endIndex + 1);
+        
+        const rowOptions = partRows.map(r => `<option value="${r}">${r}</option>`).join("");
+        const colOptions = [1,2,3,4,5].map(c => `<option value="${c}">${c}</option>`).join("");
+
+        div.innerHTML = `
+            <h2>${part.name}</h2>
+            <div class="image-viewer">${part.imgs.map(img => `<img src="${img}">`).join("")}</div>
+            <p>画像を見て、座標を選んでね</p>
+            <div class="select-group">
+                <div class="select-item"><span>縦（行）:</span><select id="row${i}">${rowOptions}</select></div>
+                <div class="select-item"><span>横（列）:</span><select id="col${i}">${colOptions}</select></div>
+            </div>
+            <div style="margin-top:20px;"><button onclick="moveStep(${i + 2})">次へ</button></div>
+        `;
+        dynamicContainer.appendChild(div);
+    });
+
+    [1,2,3,4,5].forEach(num => {
+        document.getElementById(`g${num}`).innerHTML = [1,2,3,4,5].map(n => `<option value="${n}">${n}</option>`).join("");
+    });
+
+    function moveStep(next) {
+        if (currentIdx === 0 && !document.getElementById('userName').value) return alert("名前を入れてね！");
+        if (currentIdx > 0 && currentIdx <= partsConfig.length) {
+            const i = currentIdx - 1;
+            selections[i] = `${document.getElementById(`row${i}`).value}-${document.getElementById(`col${i}`).value}`;
+        }
+        document.getElementById(`step${currentIdx}`).classList.remove('active');
+        currentIdx = next;
+        if (next === 8) showSummary();
+        document.getElementById(`step${next}`).classList.add('active');
+        document.getElementById('progressFill').style.width = (currentIdx / 8) * 100 + "%";
+    }
+
+    function showSummary() {
+        let html = `<strong>名前:</strong> ${document.getElementById('userName').value}<br><hr>`;
+        partsConfig.forEach((p, i) => html += `<strong>${p.name}:</strong> ${selections[i]}<br>`);
+        [1,2,3,4,5].forEach(n => html += `<strong>G${n}:</strong> ${document.getElementById(`g${n}`).value}<br>`);
+        document.getElementById('summary').innerHTML = html;
+    }
+
+    function sendData() {
+        const btn = document.getElementById('submitBtn');
+        btn.disabled = true; btn.innerText = "送信中...";
+        const payload = {
+            name: document.getElementById('userName').value,
+            selections: selections,
+            gDetails: { g1: document.getElementById('g1').value, g2: document.getElementById('g2').value, g3: document.getElementById('g3').value, g4: document.getElementById('g4').value, g5: document.getElementById('g5').value }
+        };
+        fetch(gasUrl, { method: "POST", mode: "no-cors", body: JSON.stringify(payload) })
+        .then(() => {
+            document.getElementById('step8').classList.remove('active');
+            document.getElementById('stepThanks').classList.add('active');
+            document.getElementById('progressFill').style.width = "100%";
+        }).catch(() => { alert("エラーが発生しました。"); btn.disabled = false; });
+    }
+</script>
+</body>
+</html>
