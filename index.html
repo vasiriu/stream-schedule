@@ -33,7 +33,7 @@
 
         #schedule-container, #poll-container { display: flex; flex-direction: column; gap: 12px; }
 
-        .schedule-card, .poll-card {
+        .schedule-card, .poll-card, .link-card {
             border-radius: 8px;
             padding: 15px;
             display: flex;
@@ -45,19 +45,32 @@
             user-select: none;
             touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
+            text-decoration: none;
+            color: inherit;
         }
 
+        .link-card {
+            background: linear-gradient(135deg, rgba(168, 168, 255, 0.2), rgba(255, 255, 255, 0.1));
+            border-left: 4px solid #a8a8ff;
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .link-card:active { transform: scale(0.98); background-color: rgba(168, 168, 255, 0.3); }
+
+        .title-text { font-size: 15px; font-weight: bold; z-index: 1; }
         .date-info { display: flex; flex-direction: column; }
         .date-text { font-size: 13px; color: #ddddff; margin-bottom: 4px; }
         .date-text span { font-size: 18px; font-weight: bold; color: #ffffff; margin-right: 8px; }
-        .title-text { font-size: 15px; font-weight: bold; z-index: 1; }
         .calendar-btn { background: none; text-decoration: none; font-size: 24px; transition: transform 0.2s; cursor: pointer; }
         .calendar-btn:hover { transform: scale(1.2); }
 
         .poll-card { cursor: pointer; position: relative; overflow: hidden; }
-        .poll-card:active {
-            transform: scale(0.98);
-        }
+        .poll-card:active { transform: scale(0.98); }
 
         #toast {
             position: fixed;
@@ -83,10 +96,17 @@
     <div class="schedule-frame">
         <div class="frame-top"></div>
         <div class="frame-middle">
+            <!-- スケジュール -->
             <div class="section-title">スケジュール</div>
             <div id="schedule-container"><div class="loading">読み込み中...</div></div>
 
-            <div class="section-title" style="margin-top: 40px;">次やってほしいのは？</div>
+            <!-- 住民登録リンク -->
+            <a href="https://vasiriu.github.io/stream-schedule/cm.html" class="link-card">
+                トモダチコレクションるいう島の住民登録お願い
+            </a>
+
+            <!-- アンケート -->
+            <div class="section-title">次やってほしいのは？</div>
             <div id="poll-container"><div class="loading">読み込み中...</div></div>
         </div>
         <div class="frame-bottom"></div>
@@ -115,28 +135,24 @@
             setTimeout(() => { toast.style.display = 'none'; }, 3000);
         }
 
+        // スケジュール
         Papa.parse(csvUrlBase, {
             download: true, header: true, skipEmptyLines: true,
             complete: function(results) {
                 const container = document.getElementById('schedule-container');
                 const now = new Date();
                 const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-                
                 const events = results.data.filter(row => {
                     const m = row['月'], d = row['日'];
                     if(!m || !d) return false;
                     return new Date(now.getFullYear(), m-1, d).getTime() >= todayStart;
                 }).slice(0, 5);
-
                 container.innerHTML = events.length ? '' : '<div class="loading">予定は順次追加されます</div>';
-                
                 events.forEach(row => {
                     const card = document.createElement('div');
                     card.className = 'schedule-card';
                     card.style.backgroundColor = monthColors[row['月']] || "rgba(0,0,0,0.4)";
-                    
                     const calLink = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(row['内容'])}&dates=${now.getFullYear()}${row['月'].padStart(2,'0')}${row['日'].padStart(2,'0')}T200000Z/210000Z`;
-                    
                     card.innerHTML = `
                         <div class="date-info">
                             <div class="date-text"><span>${row['月']}/${row['日']}</span> ${row['時間']}</div>
@@ -149,34 +165,26 @@
             }
         });
 
+        // アンケート
         Papa.parse(pollCsvUrl, {
             download: true, header: true, skipEmptyLines: true,
             complete: function(results) {
                 const container = document.getElementById('poll-container');
                 container.innerHTML = '';
-                
                 if (results.data.length === 0) {
                     container.innerHTML = '<div class="loading">アンケートはありません</div>';
                     return;
                 }
-
                 const totalVotes = results.data.reduce((sum, row) => sum + parseInt(row['得票数'] || 0), 0);
-
                 results.data.forEach(row => {
                     const title = row['タイトル'] || row[Object.keys(row)[0]];
                     const votes = parseInt(row['得票数'] || 0);
                     if (!title) return;
-
                     const percent = totalVotes > 0 ? (votes / totalVotes) * 100 : 0;
-
                     const card = document.createElement('div');
                     card.className = 'poll-card';
-                    
-                    // 背景グラデーション（数字は表示せず、塗りつぶしのみ）
                     card.style.background = `linear-gradient(to right, rgba(255, 255, 255, 0.3) ${percent}%, rgba(255, 255, 255, 0.1) ${percent}%)`;
-                    
                     card.innerHTML = `<div class="title-text">${title}</div>`;
-                    
                     card.onclick = () => vote(title);
                     container.appendChild(card);
                 });
@@ -197,11 +205,9 @@
                     return;
                 }
             } catch(e) { }
-
             showToast('投票完了！');
             count++;
             try { localStorage.setItem('voteCount', count.toString()); } catch(e){}
-
             fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, { mode: 'no-cors' })
             .catch(() => { console.error('通信エラー'); });
         }
