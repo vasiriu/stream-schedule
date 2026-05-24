@@ -62,7 +62,17 @@
 
         .link-card:active { transform: scale(0.98); background-color: rgba(168, 168, 255, 0.3); }
 
-        .title-text { font-size: 15px; font-weight: bold; z-index: 1; }
+        .title-text { 
+            font-size: 15px; 
+            font-weight: bold; 
+            z-index: 1; 
+            word-break: break-all; 
+            white-space: nowrap; 
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+        }
+        
         .date-info { display: flex; flex-direction: column; }
         .date-text { font-size: 13px; color: #ddddff; margin-bottom: 4px; }
         .date-text span { font-size: 18px; font-weight: bold; color: #ffffff; margin-right: 8px; }
@@ -124,7 +134,9 @@
             display: none;
             z-index: 10000;
             border: 1px solid #a8a8ff;
-            white-space: nowrap;
+            white-space: normal;
+            text-align: center;
+            max-width: 80%;
         }
 
         .loading { text-align: center; padding: 20px; font-size: 14px; }
@@ -162,12 +174,13 @@
         const csvUrlBase = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
         const pollCsvUrl = csvUrlBase + '&gid=504323171'; 
         
-        // ★新しく上書きデプロイして取得したGASのウェブアプリURLをここに丸ごと貼り付けてください
         const voteApiUrl = 'https://script.google.com/macros/s/AKfycbzaZpdChdq2JHnsLyNQhmkGbf7eEBDUGDmeTtSu1FaeYgppdhjligsAHrhb6zue0Wra/exec';
         
         // =================================================================
         
-        const MAX_VOTES = 1;
+        // 制限回数の定義
+        const MAX_VOTES = 1;       // 投票は1回まで
+        const MAX_ADDITIONS = 10;  // 新規追加は10回まで
 
         const monthColors = {
             "1": "rgba(200, 230, 255, 0.2)", "2": "rgba(220, 200, 255, 0.2)", "3": "rgba(255, 200, 220, 0.2)",
@@ -180,7 +193,7 @@
             const toast = document.getElementById('toast');
             toast.innerText = msg;
             toast.style.display = 'block';
-            setTimeout(() => { toast.style.display = 'none'; }, 3000);
+            setTimeout(() => { toast.style.display = 'none'; }, 4000); 
         }
 
         // スケジュール
@@ -229,43 +242,55 @@
                 const totalVotes = dataRows.reduce((sum, row) => sum + parseInt(row[1] || 0), 0);
                 
                 dataRows.forEach(row => {
-                    const title = row[0] ? row[0].trim() : '';  // A列：タイトル
-                    const votes = parseInt(row[1] || 0);        // B列：得票数
+                    let title = row[0] ? row[0].trim() : '';  
+                    const votes = parseInt(row[1] || 0);        
                     
                     if (!title) return;
                     
-                    // ★【判定強化】列の場所に関係なく、この行のデータ全体を文字として結合し「視聴者」が含まれているか調べます
                     const rowText = row.join(',');
                     const isViewer = rowText.includes('視聴者');
+                    
+                    // ★【20文字制限ロジック】20文字を超えている場合は20文字でカットして「…」を付加
+                    if (title.length > 20) {
+                        title = title.substring(0, 20) + '…';
+                    }
                     
                     const percent = totalVotes > 0 ? (votes / totalVotes) * 100 : 0;
                     const card = document.createElement('div');
                     
                     if (isViewer) {
-                        // 行のどこかに「視聴者」という文字があれば、視聴者用カラー（白ベース）
                         card.className = 'poll-card';
                         card.style.background = `linear-gradient(to right, rgba(255, 255, 255, 0.3) ${percent}%, rgba(255, 255, 255, 0.1) ${percent}%)`;
                     } else {
-                        // 「視聴者」という文字がどこにもなければ、自分用特別カラー（紫〜ピンク）
                         card.className = 'poll-card owner-item';
                         card.style.background = `linear-gradient(to right, rgba(168, 168, 255, 0.4) ${percent}%, rgba(255, 142, 198, 0.15) ${percent}%)`;
                     }
                     
                     card.innerHTML = `<div class="title-text">${title}</div>`;
-                    card.onclick = () => vote(title);
+                    card.onclick = () => vote(row[0] ? row[0].trim() : title); // 投票時はオリジナルのフルタイトルを送信
                     container.appendChild(card);
                 });
             }
         });
 
-        // 制限チェック用の共通関数
+        // 投票制限チェック
         function checkVoteLimit() {
+            const voteCount = parseInt(localStorage.getItem('stream_vote_count') || '0');
+            if (voteCount >= MAX_VOTES) {
+                showToast('投票は1回までだよ！');
+                return false;
+            }
             return true;
         }
 
-        // 制限カウントを進める共通関数
-        function incrementVoteCount() {
-            return;
+        // 新規追加制限チェック
+        function checkAddLimit() {
+            const addCount = parseInt(localStorage.getItem('stream_add_count') || '0');
+            if (addCount >= MAX_ADDITIONS) {
+                showToast('いっぱい追加してくれてありがとう、また明日追加してね。');
+                return false;
+            }
+            return true;
         }
 
         // 既存の選択肢カードをクリックした時の投票
@@ -273,13 +298,13 @@
             if (!checkVoteLimit()) return;
             
             showToast('投票完了！');
-            incrementVoteCount();
+            localStorage.setItem('stream_vote_count', parseInt(localStorage.getItem('stream_vote_count') || '0') + 1);
             
             fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, { mode: 'no-cors' })
             .catch(() => { console.error('通信エラー'); });
         }
 
-        // 自由入力フォームから送信した時の投票
+        // 自由入力フォームから送信した時の投票（新規タイトル追加）
         function voteCustom() {
             const inputElem = document.getElementById('custom-poll-title');
             const title = inputElem.value.trim();
@@ -289,10 +314,10 @@
                 return;
             }
             
-            if (!checkVoteLimit()) return;
+            if (!checkAddLimit()) return;
             
             showToast('投票を追加しました！');
-            incrementVoteCount();
+            localStorage.setItem('stream_add_count', parseInt(localStorage.getItem('stream_add_count') || '0') + 1);
             inputElem.value = ''; 
             
             fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, { mode: 'no-cors' })
