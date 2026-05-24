@@ -214,40 +214,39 @@
         });
 
         // アンケート
-        // ★header: false に変更し、位置（列のインデックス）で確実にデータを取得させます
         Papa.parse(pollCsvUrl, {
             download: true, header: false, skipEmptyLines: true,
             complete: function(results) {
                 const container = document.getElementById('poll-container');
                 container.innerHTML = '';
                 
-                // データの行数が足りない、または見出し行（1行）しかない場合は終了
                 if (results.data.length <= 1) {
                     container.innerHTML = '<div class="loading">アンケートはありません</div>';
                     return;
                 }
                 
-                // 1行目は見出し行（タイトル, 得票数, 追加元）なので、2行目（インデックス1）からデータ処理を開始
                 const dataRows = results.data.slice(1);
-                
-                // 全体の得票数を計算
                 const totalVotes = dataRows.reduce((sum, row) => sum + parseInt(row[1] || 0), 0);
                 
                 dataRows.forEach(row => {
                     const title = row[0] ? row[0].trim() : '';  // A列：タイトル
                     const votes = parseInt(row[1] || 0);        // B列：得票数
-                    const source = row[2] ? row[2].trim() : ''; // C列：追加元
                     
                     if (!title) return;
+                    
+                    // ★【判定強化】列の場所に関係なく、この行のデータ全体を文字として結合し「視聴者」が含まれているか調べます
+                    const rowText = row.join(',');
+                    const isViewer = rowText.includes('視聴者');
                     
                     const percent = totalVotes > 0 ? (votes / totalVotes) * 100 : 0;
                     const card = document.createElement('div');
                     
-                    // 「追加元（C列）」の値が「視聴者」かどうかで色分けを判定
-                    if (source === '視聴者') {
+                    if (isViewer) {
+                        // 行のどこかに「視聴者」という文字があれば、視聴者用カラー（白ベース）
                         card.className = 'poll-card';
                         card.style.background = `linear-gradient(to right, rgba(255, 255, 255, 0.3) ${percent}%, rgba(255, 255, 255, 0.1) ${percent}%)`;
                     } else {
+                        // 「視聴者」という文字がどこにもなければ、自分用特別カラー（紫〜ピンク）
                         card.className = 'poll-card owner-item';
                         card.style.background = `linear-gradient(to right, rgba(168, 168, 255, 0.4) ${percent}%, rgba(255, 142, 198, 0.15) ${percent}%)`;
                     }
