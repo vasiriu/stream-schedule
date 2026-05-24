@@ -151,9 +151,16 @@
     <div id="toast"></div>
 
     <script>
+        // =================================================================
+        // 【設定画面】URLの貼り換えはここで行ってください
+        // =================================================================
         const csvUrlBase = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSo5E-0zPAMe2eVFP0PWcl8hOm1qgznuQV94_M1EnoqS0_N95TyIFTurUoaC3QWITUYUQWHXfSfqTTq/pub?output=csv';
         const pollCsvUrl = csvUrlBase + '&gid=504323171'; 
+        
+        // ★新しく上書きデプロイして取得したGASのウェブアプリURLをここに丸ごと貼り付けてください
         const voteApiUrl = 'https://script.google.com/macros/s/AKfycbzaZpdChdq2JHnsLyNQhmkGbf7eEBDUGDmeTtSu1FaeYgppdhjligsAHrhb6zue0Wra/exec';
+        
+        // =================================================================
         
         const MAX_VOTES = 1;
 
@@ -220,6 +227,7 @@
                     const card = document.createElement('div');
                     card.className = 'poll-card';
                     card.style.background = `linear-gradient(to right, rgba(255, 255, 255, 0.3) ${percent}%, rgba(255, 255, 255, 0.1) ${percent}%)`;
+                    card.style.background = `linear-gradient(to right, rgba(255, 255, 255, 0.3) ${percent}%, rgba(255, 255, 255, 0.1) ${percent}%)`;
                     card.innerHTML = `<div class="title-text">${title}</div>`;
                     card.onclick = () => vote(title);
                     container.appendChild(card);
@@ -227,8 +235,12 @@
             }
         });
 
-        // 制限チェック用の共通関数
+        // 制限チェック用の共通関数（★テスト用に一時的に常にtrueを返すよう変更）
         function checkVoteLimit() {
+            // テスト用：常に制限を回避させて何回でも送信できるようにします
+            return true;
+            
+            /* 元の制限ロジックを一時保存（テスト終了後に戻すエリア）
             let count = 0;
             const today = new Date().toLocaleDateString();
             try {
@@ -243,15 +255,21 @@
                 }
             } catch(e) { }
             return true;
+            */
         }
 
-        // 制限カウントを進める共通関数
+        // 制限カウントを進める共通関数（★テスト用に一時的に記録を停止）
         function incrementVoteCount() {
+            // テスト中はカウントを進めません
+            return;
+            
+            /* 元のカウントロジックを一時保存
             try {
                 let count = parseInt(localStorage.getItem('voteCount') || '0');
                 count++;
                 localStorage.setItem('voteCount', count.toString());
             } catch(e){}
+            */
         }
 
         // 既存の選択肢カードをクリックした時の投票
