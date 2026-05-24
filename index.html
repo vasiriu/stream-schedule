@@ -33,7 +33,7 @@
 
         #schedule-container, #poll-container { display: flex; flex-direction: column; gap: 12px; }
 
-        .schedule-card, .poll-card, .link-card {
+        .schedule-card, .poll-card, .link-card, .input-card {
             border-radius: 8px;
             padding: 15px;
             display: flex;
@@ -72,6 +72,43 @@
         .poll-card { cursor: pointer; position: relative; overflow: hidden; }
         .poll-card:active { transform: scale(0.98); }
 
+        /* 自由入力フォーム用の追加スタイル */
+        .input-card {
+            margin-top: 15px;
+            border-left: 4px solid #a8a8ff;
+            background-color: rgba(168, 168, 255, 0.05);
+            gap: 10px;
+        }
+        .custom-game-input {
+            flex-grow: 1;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            padding: 8px 12px;
+            color: #ffffff;
+            font-size: 14px;
+            box-sizing: border-box;
+            outline: none;
+        }
+        .custom-game-input:focus {
+            border-color: #a8a8ff;
+        }
+        .custom-game-submit {
+            background-color: #a8a8ff;
+            color: #1e1e2f;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            white-space: nowrap;
+        }
+        .custom-game-submit:active {
+            background-color: #8888dd;
+        }
+
         #toast {
             position: fixed;
             bottom: 20px;
@@ -96,18 +133,20 @@
     <div class="schedule-frame">
         <div class="frame-top"></div>
         <div class="frame-middle">
-            <!-- スケジュール -->
             <div class="section-title">スケジュール</div>
             <div id="schedule-container"><div class="loading">読み込み中...</div></div>
 
-            <!-- 住民登録リンク -->
             <a href="https://vasiriu.github.io/stream-schedule/cm.html" class="link-card">
                 トモダチコレクションるいう島の住民登録お願い
             </a>
 
-            <!-- アンケート -->
             <div class="section-title">次やってほしいのは？</div>
             <div id="poll-container"><div class="loading">読み込み中...</div></div>
+
+            <div class="input-card">
+                <input type="text" id="custom-vote-input" class="custom-game-input" placeholder="候補にないゲームを入力..." maxlength="50">
+                <button type="button" id="custom-vote-btn" class="custom-game-submit">送信</button>
+            </div>
         </div>
         <div class="frame-bottom"></div>
     </div>
@@ -202,7 +241,7 @@
                 count = parseInt(localStorage.getItem('voteCount') || '0');
                 if (count >= MAX_VOTES) {
                     showToast('1日1回よ(\'ω\')');
-                    return;
+                    return false;
                 }
             } catch(e) { }
             showToast('投票完了！');
@@ -210,7 +249,25 @@
             try { localStorage.setItem('voteCount', count.toString()); } catch(e){}
             fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, { mode: 'no-cors' })
             .catch(() => { console.error('通信エラー'); });
+            return true;
         }
+
+        // 自由入力フォームの処理設定
+        document.getElementById('custom-vote-btn').onclick = () => {
+            const inputEl = document.getElementById('custom-vote-input');
+            const customTitle = inputEl.value.trim();
+            
+            if (!customTitle) {
+                showToast('文字を入力してね！');
+                return;
+            }
+            
+            // vote関数を実行し、制限に引っかからず正常に処理された場合のみ入力をクリアする
+            const success = vote(customTitle);
+            if (success) {
+                inputEl.value = '';
+            }
+        };
     </script>
 </body>
 </html>
