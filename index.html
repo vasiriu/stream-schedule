@@ -72,6 +72,11 @@
         .poll-card { cursor: pointer; position: relative; overflow: hidden; }
         .poll-card:active { transform: scale(0.98); }
 
+        /* ★配信者（自分が追加した項目）用の特別な枠線カラー */
+        .poll-card.owner-item {
+            border-left: 4px solid #ff8ec6; 
+        }
+
         /* 自由入力エリアのスタイル */
         .custom-input-container {
             margin-top: 20px;
@@ -222,12 +227,23 @@
                 results.data.forEach(row => {
                     const title = row['タイトル'] || row[Object.keys(row)[0]];
                     const votes = parseInt(row['得票数'] || 0);
+                    const source = row['追加元'] ? row['追加元'].trim() : ''; // ★C列の追加元を取得
+                    
                     if (!title) return;
                     const percent = totalVotes > 0 ? (votes / totalVotes) * 100 : 0;
                     const card = document.createElement('div');
-                    card.className = 'poll-card';
-                    card.style.background = `linear-gradient(to right, rgba(255, 255, 255, 0.3) ${percent}%, rgba(255, 255, 255, 0.1) ${percent}%)`;
-                    card.style.background = `linear-gradient(to right, rgba(255, 255, 255, 0.3) ${percent}%, rgba(255, 255, 255, 0.1) ${percent}%)`;
+                    
+                    // ★「追加元」の記載内容でカードの背景色とクラスを出し分け
+                    if (source === '視聴者') {
+                        // 視聴者が追加したものは従来のカラー（白ベースの進捗バー）
+                        card.className = 'poll-card';
+                        card.style.background = `linear-gradient(to right, rgba(255, 255, 255, 0.3) ${percent}%, rgba(255, 255, 255, 0.1) ${percent}%)`;
+                    } else {
+                        // 自分がスプレッドシートに直接書いたものは特別カラー（紫〜ピンクのグラデーション進捗バー）
+                        card.className = 'poll-card owner-item';
+                        card.style.background = `linear-gradient(to right, rgba(168, 168, 255, 0.4) ${percent}%, rgba(255, 142, 198, 0.15) ${percent}%)`;
+                    }
+                    
                     card.innerHTML = `<div class="title-text">${title}</div>`;
                     card.onclick = () => vote(title);
                     container.appendChild(card);
@@ -235,41 +251,14 @@
             }
         });
 
-        // 制限チェック用の共通関数（★テスト用に一時的に常にtrueを返すよう変更）
+        // 制限チェック用の共通関数
         function checkVoteLimit() {
-            // テスト用：常に制限を回避させて何回でも送信できるようにします
             return true;
-            
-            /* 元の制限ロジックを一時保存（テスト終了後に戻すエリア）
-            let count = 0;
-            const today = new Date().toLocaleDateString();
-            try {
-                if (localStorage.getItem('lastDate') !== today) {
-                    localStorage.setItem('voteCount', '0');
-                    localStorage.setItem('lastDate', today);
-                }
-                count = parseInt(localStorage.getItem('voteCount') || '0');
-                if (count >= MAX_VOTES) {
-                    showToast('1日1回よ(\'ω\')');
-                    return false;
-                }
-            } catch(e) { }
-            return true;
-            */
         }
 
-        // 制限カウントを進める共通関数（★テスト用に一時的に記録を停止）
+        // 制限カウントを進める共通関数
         function incrementVoteCount() {
-            // テスト中はカウントを進めません
             return;
-            
-            /* 元のカウントロジックを一時保存
-            try {
-                let count = parseInt(localStorage.getItem('voteCount') || '0');
-                count++;
-                localStorage.setItem('voteCount', count.toString());
-            } catch(e){}
-            */
         }
 
         // 既存の選択肢カードをクリックした時の投票
@@ -297,7 +286,7 @@
             
             showToast('投票を追加しました！');
             incrementVoteCount();
-            inputElem.value = ''; // 入力欄をクリア
+            inputElem.value = ''; 
             
             fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, { mode: 'no-cors' })
             .catch(() => { console.error('通信エラー'); });
