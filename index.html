@@ -72,6 +72,40 @@
         .poll-card { cursor: pointer; position: relative; overflow: hidden; }
         .poll-card:active { transform: scale(0.98); }
 
+        /* 自由入力エリアのスタイル */
+        .custom-input-container {
+            margin-top: 20px;
+            display: flex;
+            gap: 8px;
+        }
+        .custom-input-text {
+            flex: 1;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #a8a8ff;
+            background-color: rgba(0, 0, 0, 0.4);
+            color: #ffffff;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        .custom-input-text::placeholder {
+            color: #8888aa;
+        }
+        .custom-input-btn {
+            padding: 10px 16px;
+            border-radius: 6px;
+            border: none;
+            background-color: #a8a8ff;
+            color: #1e1e2f;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.1s;
+        }
+        .custom-input-btn:active {
+            background-color: #8888dd;
+        }
+
         #toast {
             position: fixed;
             bottom: 20px;
@@ -105,6 +139,11 @@
 
             <div class="section-title">次やってほしいのは？</div>
             <div id="poll-container"><div class="loading">読み込み中...</div></div>
+            
+            <div class="custom-input-container">
+                <input type="text" id="custom-poll-title" class="custom-input-text" placeholder="ここにない見たいゲームを入力してね">
+                <button type="button" class="custom-input-btn" onclick="voteCustom()">送信</button>
+            </div>
         </div>
         <div class="frame-bottom"></div>
     </div>
@@ -188,7 +227,8 @@
             }
         });
 
-        function vote(title) {
+        // 制限チェック用の共通関数
+        function checkVoteLimit() {
             let count = 0;
             const today = new Date().toLocaleDateString();
             try {
@@ -199,18 +239,49 @@
                 count = parseInt(localStorage.getItem('voteCount') || '0');
                 if (count >= MAX_VOTES) {
                     showToast('1日1回よ(\'ω\')');
-                    return;
+                    return false;
                 }
             } catch(e) { }
-            showToast('投票完了！');
-            count++;
-            try { localStorage.setItem('voteCount', count.toString()); } catch(e){}
+            return true;
+        }
+
+        // 制限カウントを進める共通関数
+        function incrementVoteCount() {
+            try {
+                let count = parseInt(localStorage.getItem('voteCount') || '0');
+                count++;
+                localStorage.setItem('voteCount', count.toString());
+            } catch(e){}
+        }
+
+        // 既存の選択肢カードをクリックした時の投票
+        function vote(title) {
+            if (!checkVoteLimit()) return;
             
-            // mode: 'no-cors' を排除し、Googleのリダイレクトを正常に追従できるように処理を修正
-            fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, {
-                method: 'GET',
-                redirect: 'follow'
-            })
+            showToast('投票完了！');
+            incrementVoteCount();
+            
+            fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, { mode: 'no-cors' })
+            .catch(() => { console.error('通信エラー'); });
+        }
+
+        // 自由入力フォームから送信した時の投票
+        function voteCustom() {
+            const inputElem = document.getElementById('custom-poll-title');
+            const title = inputElem.value.trim();
+            
+            if (!title) {
+                showToast('タイトルを入力してね！');
+                return;
+            }
+            
+            if (!checkVoteLimit()) return;
+            
+            showToast('投票を追加しました！');
+            incrementVoteCount();
+            inputElem.value = ''; // 入力欄をクリア
+            
+            fetch(`${voteApiUrl}?title=${encodeURIComponent(title)}`, { mode: 'no-cors' })
             .catch(() => { console.error('通信エラー'); });
         }
     </script>
