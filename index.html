@@ -294,7 +294,7 @@
             checkAndResetDailyLimits(); // 判定前に日付を確認
             const voteCount = parseInt(localStorage.getItem('stream_vote_count') || '0');
             if (voteCount >= MAX_VOTES) {
-                showToast('投票は1回までだよ！');
+                showToast('投票は1日1回までね！');
                 return false;
             }
             return true;
