@@ -82,12 +82,10 @@
         .poll-card { cursor: pointer; position: relative; overflow: hidden; }
         .poll-card:active { transform: scale(0.98); }
 
-        /* 配信者（自分が追加した項目）用の特別な枠線カラー */
         .poll-card.owner-item {
             border-left: 4px solid #ff8ec6; 
         }
 
-        /* 自由入力エリアのスタイル */
         .custom-input-container {
             margin-top: 20px;
             display: flex;
@@ -179,8 +177,8 @@
         // =================================================================
         
         // 制限回数の定義
-        const MAX_VOTES = 1;       // 投票は1回まで
-        const MAX_ADDITIONS = 10;  // 新規追加は10回まで
+        const MAX_VOTES = 1;       // 1日あたりの投票上限
+        const MAX_ADDITIONS = 10;  // 1日あたりの新規追加上限
 
         const monthColors = {
             "1": "rgba(200, 230, 255, 0.2)", "2": "rgba(220, 200, 255, 0.2)", "3": "rgba(255, 200, 220, 0.2)",
@@ -194,6 +192,25 @@
             toast.innerText = msg;
             toast.style.display = 'block';
             setTimeout(() => { toast.style.display = 'none'; }, 4000); 
+        }
+
+        // 今日の日付文字列（YYYY-MM-DD）を取得する関数
+        function getTodayString() {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        // 日付チェックをして、日が変わっていたらカウントをリセットする関数
+        function checkAndResetDailyLimits() {
+            const today = getTodayString();
+            const lastVoteDate = localStorage.getItem('stream_last_vote_date');
+            
+            // 保存されている日付が今日と違っていたら、カウントをクリアして日付を更新
+            if (lastVoteDate !== today) {
+                localStorage.setItem('stream_vote_count', '0');
+                localStorage.setItem('stream_add_count', '0');
+                localStorage.setItem('stream_last_vote_date', today);
+            }
         }
 
         // スケジュール
@@ -250,7 +267,6 @@
                     const rowText = row.join(',');
                     const isViewer = rowText.includes('視聴者');
                     
-                    // ★【20文字制限ロジック】20文字を超えている場合は20文字でカットして「…」を付加
                     if (title.length > 20) {
                         title = title.substring(0, 20) + '…';
                     }
@@ -267,7 +283,7 @@
                     }
                     
                     card.innerHTML = `<div class="title-text">${title}</div>`;
-                    card.onclick = () => vote(row[0] ? row[0].trim() : title); // 投票時はオリジナルのフルタイトルを送信
+                    card.onclick = () => vote(row[0] ? row[0].trim() : title); 
                     container.appendChild(card);
                 });
             }
@@ -275,6 +291,7 @@
 
         // 投票制限チェック
         function checkVoteLimit() {
+            checkAndResetDailyLimits(); // 判定前に日付を確認
             const voteCount = parseInt(localStorage.getItem('stream_vote_count') || '0');
             if (voteCount >= MAX_VOTES) {
                 showToast('投票は1回までだよ！');
@@ -285,6 +302,7 @@
 
         // 新規追加制限チェック
         function checkAddLimit() {
+            checkAndResetDailyLimits(); // 判定前に日付を確認
             const addCount = parseInt(localStorage.getItem('stream_add_count') || '0');
             if (addCount >= MAX_ADDITIONS) {
                 showToast('いっぱい追加してくれてありがとう、また明日追加してね。');
