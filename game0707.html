@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>配信コメント連動 防衛ゲーム（デモモード搭載版）</title>
+    <style>
+        body {
+            background-color: #222;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        #gameContainer {
+            position: relative;
+        }
+        canvas {
+            background-color: #333;
+            border: 2px solid #555;
+            cursor: default;
+        }
+        #uiPanel {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            background: #444;
+            padding: 10px;
+            border-radius: 5px;
+            width: 500px;
+            box-sizing: border-box;
+            flex-wrap: wrap;
+        }
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 5px;
+        }
+        button {
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        #spawnEnemyBtn {
+            background-color: #aa3333;
+            color: white;
+            border: 1px solid #ff5555;
+            font-weight: bold;
+        }
+        #demoBtn {
+            background-color: #33aa33;
+            color: white;
+            border: 1px solid #55ff55;
+            font-weight: bold;
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+        }
+        .info {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #ddd;
+            width: 500px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="gameContainer">
+    <canvas id="gameCanvas" width="400" height="800"></canvas>
+</div>
+
+<div id="uiPanel">
+    <label>疑似コメント生成:</label>
+    <input type="text" id="commentInput" placeholder="例: 水妨害貫通, 草妨害範囲" value="水妨害貫通">
+    <button id="spawnBtn">送信</button>
+    <button id="spawnEnemyBtn">敵スポーン</button>
+    
+    <button id="demoBtn">デモモード: OFF (クリックで自動生成開始)</button>
+</div>
+
+<div class="info">
+    <p><strong>【更新された仕様（デモモード）】</strong></p>
+    <ul>
+        <li><strong>デモ機能追加:</strong> ボタン一つで敵とランダムな味方が次々と自動生成されるデモモードを搭載しました。</li>
+    </ul>
+</div>
+
+<script>
+// --- 定数・設定値 ---
+const CANVAS_W = 400;
+const CANVAS_H = 800;
+
+const TOP_ZONE_H = CANVAS_H * 0.1;
+const MID_ZONE_H = CANVAS_H * 0.75;
+const BOT_ZONE_H = CANVAS_H * 0.15;
+const BLUE_LINE_Y = CANVAS_H - BOT_ZONE_H;
+
+// 1射程 = 136px
+const RANGE_UNIT = 136;
+
+const ELEMENTS = {
+    '無': { color: '#ffffff' },
+    '火': { color: '#ff4444', strong: '草', weak: '水' },
+    '水': { color: '#4444ff', strong: '火', weak: '風' },
+    '草': { color: '#44ff44', strong: '土', weak: '火' },
+    '風': { color: '#44ffff', strong: '水', weak: '土' },
+    '土': { color: '#cdaa66', strong: '風', weak: '草' }
+};
+
+const ALLY_TYPES = {
+    '近接': { range: 1, atk: 10, interval: 1 },
+    '召喚': { range: 2, atk: 3, interval: 10 },
+    '妨害': { range: 2, atk: 2, interval: 5 },
+    '支援': { range: 1, atk: 0, interval: 10 },
+    '遠距離': { range: 3, atk: 5, interval: 2 }
+};
+
+const TRAITS = {
+    'チャージ': {
+        '近接': { atk: 2.5, interval: 2.0 },
+        '召喚': { atk: 2.0, interval: 1.5 },
+        '妨害': { range: 1.5, interval: 2.0 },
+        '支援': { heal: 2, interval: 1.0 }, 
+        '遠距離': { atk: 3.0, interval: 2.0 }
+    },
+    '多段': {
+        '近接': { atk: 0.7, hits: 2 },
+        '召喚': { atk: 0.6, hits: 2 },
+        '妨害': { atk: 0.5, hits: 2 },
+        '支援': { effect: 1.0 },
+        '遠距離': { atk: 0.7, hits: 2 }
+    },
+    '貫通': {
+        '近接': { atk: 0.9 }, 
+        '召喚': { atk: 0.8 },
+        '妨害': { atk: 1.0 },
+        '支援': { atk: 1.0 },
+        '遠距離': { atk: 0.8 }
+    },
+    '範囲': {
+        '近接': { atk: 0.4 },
+        '召喚': { atk: 0.3 },
+        '妨害': { range: 2.0 },
+        '支援': { range: 2.0 }, 
+        '遠距離': { atk: 0.4 }
+    },
+    '反発': {
+        '近接': { atk: 1.0 },
+        '召喚': { atk: 1.0 },
+        '妨害': { speedMod: 0.3 },
+        '支援': { atk: 1.0 }, 
+        '遠距離': { atk: 1.0 }
+    }
+};
+
+const ENEMY_BASE_SPEED = 30; 
+const ENEMY_TYPES = {
+    '汎': { hp: 20, atk: 1, def: 1, spd: 1, interval: 1, range: 1, color: '#aaa' },
+    '速': { hp: 10, atk: 1, def: 0.8, spd: 1.5, interval: 1.2, range: 1, color: '#ffaa00' },
+    '防': { hp: 60, atk: 1, def: 5, spd: 0.7, interval: 1, range: 1, color: '#888' },
+    '遠': { hp: 20, atk: 1, def: 0.8, spd: 1, interval: 1, range: 2, color: '#aa44ff' },
+    '支': { hp: 20, atk: 0, def: 0.8, spd: 1, interval: 0.5, range: 0.5, color: '#44ffaa' }
+};
+
+class Game {
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.lastTime = performance.now();
+        
+        this.baseHp = 100;
+        this.maxBaseHp = 100;
+        this.wave = 1;
+        
+        this.enemies = [];
+        this.allies = [];
+        this.summonObjects = []; 
+        this.interferenceAreas = []; 
+        this.projectiles = [];
+        this.effects = [];
+        
+        this.player = new Player(CANVAS_W / 2, CANVAS_H - BOT_ZONE_H / 2);
+        
+        this.keys = {};
+        this.mouse = { x: 0, y: 0, isDown: false };
+        this.draggedAlly = null;
+
+        // デモモード用変数
+        this.isDemoMode = false;
+        this.demoEnemyTimer = 2.0;
+        this.demoAllyTimer = 3.0;
+
+        this.initEvents();
+        requestAnimationFrame(this.loop.bind(this));
+    }
+
+    initEvents() {
+        window.addEventListener('keydown', e => this.keys[e.key] = true);
+        window.addEventListener('keyup', e => this.keys[e.key] = false);
+        
+        this.canvas.addEventListener('mousedown', e => {
+            const rect = this.canvas.getBoundingClientRect();
+            this.mouse.x = e.clientX - rect.left;
+            this.mouse.y = e.clientY - rect.top;
+            this.mouse.isDown = true;
+            
+            for (let i = this.allies.length - 1; i >= 0; i--) {
+                let ally = this.allies[i];
+                let dx = this.mouse.x - ally.x;
+                let dy = this.mouse.y - ally.y;
+                if (Math.sqrt(dx*dx + dy*dy) < 20) {
+                    this.draggedAlly = ally;
+                    break;
+                }
+            }
+        });
+        
+        this.canvas.addEventListener('mousemove', e => {
+            const rect = this.canvas.getBoundingClientRect();
+            this.mouse.x = e.clientX - rect.left;
+            this.mouse.y = e.clientY - rect.top;
+            
+            if (this.draggedAlly) {
+                this.draggedAlly.x = Math.max(this.draggedAlly.radius, Math.min(CANVAS_W - this.draggedAlly.radius, this.mouse.x));
+                this.draggedAlly.y = Math.max(BLUE_LINE_Y + this.draggedAlly.radius, Math.min(CANVAS_H - this.draggedAlly.radius, this.mouse.y));
+            }
+        });
+        
+        this.canvas.addEventListener('mouseup', () => {
+            this.mouse.isDown = false;
+            this.draggedAlly = null;
+        });
+    }
+
+    parseComment(comment) {
+        let element = '無';
+        let type = '';
+        let trait = '';
+
+        for (let e in ELEMENTS) if (comment.includes(e)) element = e;
+        for (let t in ALLY_TYPES) if (comment.includes(t)) type = t;
+        for (let tr in TRAITS) if (comment.includes(tr)) trait = tr;
+
+        if (type) {
+            let startX = 50 + Math.random() * (CANVAS_W - 100);
+            let startY = BLUE_LINE_Y + 20 + Math.random() * (BOT_ZONE_H - 40);
+            
+            let newAlly = new Ally(startX, startY, element, type, trait);
+            this.allies.push(newAlly);
+            this.addEffect(startX, startY, "SPAWN!", "#fff");
+        }
+    }
+
+    spawnEnemy() {
+        const spawnPool = ['汎', '汎', '汎', '汎', '汎', '速', '速', '防', '遠', '支'];
+        let randomType = spawnPool[Math.floor(Math.random() * spawnPool.length)];
+        
+        let x = 20 + Math.random() * (CANVAS_W - 40);
+        let y = TOP_ZONE_H / 2;
+        
+        let hpMultiplier = 1 + (this.wave * 0.1);
+        this.enemies.push(new Enemy(x, y, randomType, hpMultiplier));
+    }
+
+    // デモモード用：ランダムな味方を生成
+    spawnRandomAlly() {
+        const elements = Object.keys(ELEMENTS);
+        const types = Object.keys(ALLY_TYPES);
+        const traits = Object.keys(TRAITS);
+
+        // 無属性以外の属性をランダムに選ぶ
+        const validElements = elements.filter(e => e !== '無');
+        const el = validElements[Math.floor(Math.random() * validElements.length)];
+        const ty = types[Math.floor(Math.random() * types.length)];
+        const tr = traits[Math.floor(Math.random() * traits.length)];
+
+        let startX = 50 + Math.random() * (CANVAS_W - 100);
+        let startY = BLUE_LINE_Y + 20 + Math.random() * (BOT_ZONE_H - 40);
+
+        let newAlly = new Ally(startX, startY, el, ty, tr);
+        this.allies.push(newAlly);
+        this.addEffect(startX, startY, "AUTO SPAWN!", "#ffaa00");
+    }
+
+    toggleDemoMode() {
+        this.isDemoMode = !this.isDemoMode;
+        const btn = document.getElementById('demoBtn');
+        if (this.isDemoMode) {
+            btn.innerText = "デモモード: ON (クリックで停止)";
+            btn.style.backgroundColor = "#aa3333";
+            btn.style.borderColor = "#ff5555";
+        } else {
+            btn.innerText = "デモモード: OFF (クリックで自動生成開始)";
+            btn.style.backgroundColor = "#33aa33";
+            btn.style.borderColor = "#55ff55";
+        }
+    }
+
+    addEffect(x, y, text, color) {
+        this.effects.push({ x: x||0, y: y||0, text: String(text), color: color||'#fff', life: 30 });
+    }
+
+    update(dt) {
+        if (this.baseHp <= 0) return;
+
+        // --- デモモードの進行処理 ---
+        if (this.isDemoMode) {
+            this.demoEnemyTimer -= dt;
+            if (this.demoEnemyTimer <= 0) {
+                this.spawnEnemy();
+                // 1.5秒〜3.5秒間隔で敵をスポーン
+                this.demoEnemyTimer = 1.5 + Math.random() * 2.0; 
+            }
+
+            this.demoAllyTimer -= dt;
+            // 味方は最大15体まで
+            if (this.demoAllyTimer <= 0 && this.allies.length < 15) {
+                this.spawnRandomAlly();
+                // 2.0秒〜5.0秒間隔で味方をスポーン
+                this.demoAllyTimer = 2.0 + Math.random() * 3.0;
+            }
+        }
+
+        this.player.update(dt, this);
+        this.allies.forEach(ally => ally.update(dt, this));
+
+        for (let i = this.summonObjects.length - 1; i >= 0; i--) {
+            let obj = this.summonObjects[i];
+            obj.update(dt, this);
+            if (obj.life <= 0) {
+                this.summonObjects.splice(i, 1);
+            }
+        }
+
+        for (let i = this.interferenceAreas.length - 1; i >= 0; i--) {
+            let area = this.interferenceAreas[i];
+            area.update(dt, this);
+            if (area.life <= 0) {
+                this.interferenceAreas.splice(i, 1);
+            }
+        }
+
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+            let enemy = this.enemies[i];
+            enemy.update(dt, this);
+            if (enemy.hp <= 0) {
+                this.enemies.splice(i, 1);
+            }
+        }
+
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            let p = this.projectiles[i];
+            p.update(dt, this);
+            if (p.life <= 0) this.projectiles.splice(i, 1);
+        }
+
+        for (let i = this.effects.length - 1; i >= 0; i--) {
+            this.effects[i].life--;
+            this.effects[i].y -= 0.5;
+            if (this.effects[i].life <= 0) this.effects.splice(i, 1);
+        }
+    }
+
+    draw() {
+        this.ctx.fillStyle = '#1a0000';
+        this.ctx.fillRect(0, 0, CANVAS_W, TOP_ZONE_H);
+        
+        this.ctx.fillStyle = '#223322';
+        this.ctx.fillRect(0, TOP_ZONE_H, CANVAS_W, MID_ZONE_H);
+        
+        this.ctx.fillStyle = '#002244';
+        this.ctx.fillRect(0, BLUE_LINE_Y, CANVAS_W, BOT_ZONE_H);
+
+        this.ctx.strokeStyle = '#00aaff';
+        this.ctx.lineWidth = 3;
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, BLUE_LINE_Y); this.ctx.lineTo(CANVAS_W, BLUE_LINE_Y);
+        this.ctx.stroke();
+        this.ctx.lineWidth = 1;
+
+        this.ctx.strokeStyle = '#555';
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, TOP_ZONE_H); this.ctx.lineTo(CANVAS_W, TOP_ZONE_H);
+        this.ctx.stroke();
+
+        if (this.baseHp <= 0) {
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '30px sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('GAME OVER', CANVAS_W/2, CANVAS_H/2);
+            return;
+        }
+
+        this.interferenceAreas.forEach(area => area.draw(this.ctx));
+
+        this.allies.forEach(ally => ally.draw(this.ctx));
+        this.summonObjects.forEach(obj => obj.draw(this.ctx));
+        this.enemies.forEach(enemy => enemy.draw(this.ctx));
+        this.player.draw(this.ctx);
+        this.projectiles.forEach(p => p.draw(this.ctx));
+
+        this.effects.forEach(eff => {
+            if(isNaN(eff.x) || isNaN(eff.y)) return;
+            this.ctx.fillStyle = eff.color;
+            this.ctx.font = '12px sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(eff.text, eff.x, eff.y);
+        });
+
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = '16px sans-serif';
+        this.ctx.textAlign = 'left';
+        this.ctx.fillText(`Wave: ${this.wave}`, 10, 20);
+        this.ctx.fillText(`Base HP: ${Math.ceil(this.baseHp)} / ${Math.ceil(this.maxBaseHp)}`, 10, 40);
+        
+        if (this.isDemoMode) {
+            this.ctx.fillStyle = '#55ff55';
+            this.ctx.font = '14px sans-serif';
+            this.ctx.textAlign = 'right';
+            this.ctx.fillText(`DEMO MODE`, CANVAS_W - 10, 20);
+        }
+    }
+
+    loop(timestamp) {
+        try {
+            let dt = (timestamp - this.lastTime) / 1000;
+            this.lastTime = timestamp;
+            if (dt > 0.1) dt = 0.1;
+
+            this.update(dt);
+            this.draw();
+        } catch (e) {
+            console.error("Game Loop Error:", e);
+            this.ctx.fillStyle = '#ff0000';
+            this.ctx.font = '12px sans-serif';
+            this.ctx.textAlign = 'left';
+            this.ctx.fillText("Crash Prevented: " + e.message, 5, 15);
+        }
+        requestAnimationFrame(this.loop.bind(this));
+    }
+}
+
+/**
+ * ユーティリティ：円形ゲージを描画する関数
+ */
+function drawCircularGauge(ctx, x, y, radius, ratio, color) {
+    if (isNaN(x) || isNaN(y) || isNaN(ratio)) return;
+    ratio = Math.max(0, Math.min(1, ratio));
+    
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(x, y, radius, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * ratio));
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.lineWidth = 1; 
+}
+
+/**
+ * ダメージ計算処理
+ */
+function calculateDamage(baseAtk, attackerElem, defenderElem, defenderDef, trait) {
+    let multiplier = 1.0;
+    
+    if (trait === '妨害') {
+        multiplier = 1.3;
+    } else if (ELEMENTS[attackerElem] && ELEMENTS[defenderElem]) {
+        if (ELEMENTS[attackerElem].strong === defenderElem) multiplier = 1.3;
+        if (ELEMENTS[attackerElem].weak === defenderElem) multiplier = 0.7;
+    }
+    
+    let damage = ((baseAtk || 0) * multiplier) - (defenderDef || 0);
+    let finalDamage = Math.max(1, Math.floor(damage));
+    return isNaN(finalDamage) ? 1 : finalDamage;
+}
+
+class Player {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.radius = 15;
+        this.speed = 120;
+        this.atk = 6;
+        this.element = '無';
+        this.mode = '近接';
+        
+        this.interval = 1.0; 
+        this.attackTimer = 0;
+        this.range = 1 * RANGE_UNIT;
+        
+        this.buffTimer = 0;
+        this.buffElement = '無';
+        this.buffAtkMult = 1.0;
+    }
+
+    update(dt, game) {
+        if (this.buffTimer > 0) this.buffTimer -= dt;
+
+        let dx = 0, dy = 0;
+        if (game.keys['w'] || game.keys['W']) dy -= 1;
+        if (game.keys['s'] || game.keys['S']) dy += 1;
+        if (game.keys['a'] || game.keys['A']) dx -= 1;
+        if (game.keys['d'] || game.keys['D']) dx += 1;
+
+        if (dx !== 0 || dy !== 0) {
+            let len = Math.sqrt(dx*dx + dy*dy);
+            if (len > 0) { 
+                this.x += (dx / len) * this.speed * dt;
+                this.y += (dy / len) * this.speed * dt;
+            }
+        }
+
+        this.x = Math.max(this.radius, Math.min(CANVAS_W - this.radius, this.x));
+        this.y = Math.max(BLUE_LINE_Y + this.radius, Math.min(CANVAS_H - this.radius, this.y));
+
+        if (game.keys[' ']) {
+            game.keys[' '] = false;
+            this.mode = this.mode === '近接' ? '遠距離' : '近接';
+            this.range = (this.mode === '近接' ? 1 : 3) * RANGE_UNIT;
+            game.addEffect(this.x, this.y - 20, `切替: ${this.mode}`, '#aaf');
+        }
+
+        this.attackTimer -= dt;
+        if (this.attackTimer <= 0) {
+            let targets = this.findTargets(game.enemies);
+            if (targets.length > 0) {
+                this.attack(targets[0], game);
+                this.attackTimer = this.interval;
+            } else {
+                this.attackTimer = 0;
+            }
+        }
+    }
+
+    findTargets(enemies) {
+        let nearest = null;
+        let minDist = this.range;
+        for (let enemy of enemies) {
+            let dist = Math.sqrt(Math.pow(this.x - enemy.x, 2) + Math.pow(this.y - enemy.y, 2));
+            if (dist <= minDist) {
+                minDist = dist;
+                nearest = enemy;
+            }
+        }
+        return nearest ? [nearest] : [];
+    }
+
+    attack(target, game) {
+        let currentElement = this.buffTimer > 0 ? this.buffElement : this.element;
+        let currentAtk = this.buffTimer > 0 ? this.atk * this.buffAtkMult : this.atk;
+        let effectColor = (ELEMENTS[currentElement] && ELEMENTS[currentElement].color) ? ELEMENTS[currentElement].color : '#fff';
+        
+        if (this.mode === '近接') {
+            let dmg = calculateDamage(currentAtk, currentElement, '無', target.def, '');
+            target.takeDamage(dmg, '', effectColor, game);
+            game.projectiles.push(new Projectile(this.x, this.y, target.x, target.y, 'slash'));
+        } else {
+            game.projectiles.push(new Projectile(this.x, this.y, target.x, target.y, 'bullet', currentAtk, currentElement));
+        }
+    }
+
+    draw(ctx) {
+        ctx.fillStyle = '#00aaff';
+        ctx.fillRect(this.x - 10, this.y - 10, 20, 20);
+        
+        ctx.strokeStyle = 'rgba(0, 170, 255, 0.15)';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.range, 0, Math.PI * 2);
+        ctx.stroke();
+
+        if (this.buffTimer > 0 && ELEMENTS[this.buffElement]) {
+            ctx.strokeStyle = ELEMENTS[this.buffElement].color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 8, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.lineWidth = 1;
+        }
+
+        let ratio = 1 - (this.attackTimer / this.interval);
+        drawCircularGauge(ctx, this.x, this.y, 16, ratio, 'rgba(255, 255, 255, 0.8)');
+    }
+}
+
+/**
+ * 召喚オブジェクト
+ */
+class SummonObject {
+    constructor(x, y, atk, element, trait) {
+        this.x = x;
+        this.y = y;
+        this.radius = 10;
+        
+        this.atk = atk * 0.33; 
+        
+        this.element = element;
+        this.trait = trait;
+        this.life = 6.0;
+        this.maxLife = 6.0;
+        
+        this.baseInterval = 2.0;
+        let mod = 1.0;
+        if (trait && TRAITS[trait] && TRAITS[trait]['召喚'] && TRAITS[trait]['召喚'].interval) {
+            mod = TRAITS[trait]['召喚'].interval;
+        }
+        this.interval = this.baseInterval / mod;
+        this.timer = 0; 
+        
+        this.hits = 1;
+        if (trait === '多段' && TRAITS['多段']['召喚']) {
+            this.hits = TRAITS['多段']['召喚'].hits || 2;
+        }
+
+        this.buffTimer = 0;
+        this.buffElement = '無';
+        this.buffAtkMult = 1.0;
+    }
+    
+    update(dt, game) {
+        if (this.buffTimer > 0) this.buffTimer -= dt;
+
+        this.life -= dt;
+        if (this.life <= 0) return;
+        
+        this.timer -= dt;
+        if (this.timer <= 0) {
+            this.fire(game);
+            this.timer = this.interval;
+        }
+    }
+    
+    fire(game) {
+        let currentElement = this.buffTimer > 0 ? this.buffElement : this.element;
+        let currentAtk = this.buffTimer > 0 ? this.atk * this.buffAtkMult : this.atk;
+        let effectColor = (ELEMENTS[currentElement] && ELEMENTS[currentElement].color) ? ELEMENTS[currentElement].color : '#fff';
+        
+        game.addEffect(this.x, this.y - 10, "ATK!", effectColor);
+
+        const numBullets = 12;
+
+        for (let i = 0; i < this.hits; i++) {
+            setTimeout(() => {
+                for (let j = 0; j < numBullets; j++) {
+                    let angle = (Math.PI * 2 / numBullets) * j;
+                    let tx = this.x + Math.cos(angle) * 100;
+                    let ty = this.y + Math.sin(angle) * 100;
+                    
+                    let p = new Projectile(this.x, this.y, tx, ty, 'bullet', currentAtk, currentElement, this.trait);
+                    game.projectiles.push(p);
+                }
+            }, i * 200);
+        }
+    }
+    
+    draw(ctx) {
+        if (this.life <= 0 || isNaN(this.x) || isNaN(this.y)) return;
+        
+        let displayColor = (this.buffTimer > 0 && ELEMENTS[this.buffElement]) ? 
+                            ELEMENTS[this.buffElement].color : 
+                            (ELEMENTS[this.element] ? ELEMENTS[this.element].color : '#fff');
+        
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(this.x - 10, this.y - 10, 20, 20);
+        ctx.strokeStyle = displayColor;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(this.x - 10, this.y - 10, 20, 20);
+        ctx.lineWidth = 1;
+        
+        ctx.fillStyle = '#f00';
+        ctx.fillRect(this.x - 10, this.y + 12, 20, 3);
+        ctx.fillStyle = '#0f0';
+        ctx.fillRect(this.x - 10, this.y + 12, 20 * Math.max(0, this.life / this.maxLife), 3);
+        
+        ctx.fillStyle = displayColor;
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('召', this.x, this.y + 4);
+
+        if (this.buffTimer > 0 && ELEMENTS[this.buffElement]) {
+            ctx.strokeStyle = ELEMENTS[this.buffElement].color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 16, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.lineWidth = 1;
+        }
+
+        let ratio = 1 - (this.timer / this.interval);
+        drawCircularGauge(ctx, this.x, this.y, 15, ratio, 'rgba(255, 255, 255, 0.8)');
+    }
+}
+
+/**
+ * 妨害エリア（楕円状のデバフ・継続ダメージ領域）
+ */
+class InterferenceArea {
+    constructor(x, y, atk, element, trait, range) {
+        this.x = x;
+        this.y = y;
+        this.atk = atk;
+        this.element = element;
+        this.trait = trait;
+        
+        this.rx = range / 3;
+        this.ry = (range * 0.6) / 3;
+        
+        this.life = 5.0; 
+        this.maxLife = 5.0;
+        this.dotTimer = 1.0; 
+    }
+
+    update(dt, game) {
+        this.life -= dt;
+        if (this.life <= 0) return;
+
+        let inRangeEnemies = game.enemies.filter(enemy => {
+            let dx = enemy.x - this.x;
+            let dy = enemy.y - this.y;
+            return (dx * dx) / (this.rx * this.rx) + (dy * dy) / (this.ry * this.ry) <= 1;
+        });
+
+        inRangeEnemies.forEach(enemy => {
+            enemy.status.speedMod = 0.5;
+            enemy.status.speedModTime = 0.1;
+        });
+
+        this.dotTimer -= dt;
+        if (this.dotTimer <= 0) {
+            let effectColor = (ELEMENTS[this.element] && ELEMENTS[this.element].color) ? ELEMENTS[this.element].color : '#fff';
+            inRangeEnemies.forEach(enemy => {
+                let dmg = calculateDamage(this.atk, this.element, '無', enemy.def, this.trait);
+                enemy.takeDamage(dmg, this.trait, effectColor, game);
+            });
+            this.dotTimer = 1.0; 
+        }
+    }
+
+    draw(ctx) {
+        if (this.life <= 0 || isNaN(this.x) || isNaN(this.y)) return;
+        
+        let effectColor = (ELEMENTS[this.element] && ELEMENTS[this.element].color) ? ELEMENTS[this.element].color : '#fff';
+        
+        ctx.globalAlpha = 0.2;
+        ctx.fillStyle = effectColor;
+        ctx.beginPath();
+        ctx.ellipse(this.x, this.y, this.rx, this.ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.globalAlpha = 1.0;
+        ctx.strokeStyle = effectColor;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.lineWidth = 1;
+    }
+}
+
+/**
+ * 味方クラス
+ */
+class Ally {
+    constructor(x, y, element, type, trait) {
+        this.x = x;
+        this.y = y;
+        this.radius = 12;
+        this.element = element;
+        this.type = type;
+        this.trait = trait;
+        
+        let baseStats = ALLY_TYPES[type] || ALLY_TYPES['近接'];
+        this.atk = baseStats.atk;
+        this.range = baseStats.range * RANGE_UNIT;
+        this.interval = baseStats.interval;
+        this.attackTimer = Math.random() * this.interval; 
+        
+        if (trait && TRAITS[trait] && TRAITS[trait][type]) {
+            let mods = TRAITS[trait][type];
+            if (mods.atk !== undefined) this.atk *= mods.atk;
+            if (mods.interval !== undefined) this.interval *= mods.interval;
+            if (mods.range !== undefined) this.range *= mods.range;
+        }
+
+        if (this.type === '召喚') {
+            this.range = 3.5 * RANGE_UNIT; 
+        }
+
+        this.buffTimer = 0;
+        this.buffElement = '無';
+        this.buffAtkMult = 1.0;
+    }
+
+    update(dt, game) {
+        if (this.buffTimer > 0) this.buffTimer -= dt;
+
+        if (this.attackTimer > 0) {
+            this.attackTimer -= dt;
+        } else {
+            if (this.type === '支援') {
+                this.support(game);
+                this.attackTimer = this.interval;
+            } else if (this.type === '召喚') {
+                let targets = this.findTargets(game.enemies);
+                if (targets.length > 0) {
+                    this.summon(targets[0], game);
+                    this.attackTimer = this.interval;
+                }
+            } else {
+                let targets = this.findTargets(game.enemies);
+                if (targets.length > 0) {
+                    this.attack(targets, game);
+                    this.attackTimer = this.interval;
+                } else {
+                    this.attackTimer = 0;
+                }
+            }
+        }
+    }
+
+    findTargets(enemies) {
+        let inRangeEnemies = enemies.filter(enemy => {
+            let dist = Math.sqrt(Math.pow(this.x - enemy.x, 2) + Math.pow(this.y - enemy.y, 2));
+            return dist <= this.range;
+        });
+
+        if (this.trait === '範囲') {
+            return inRangeEnemies.slice(0, 4);
+        } else {
+            if (inRangeEnemies.length === 0) return [];
+            let nearest = inRangeEnemies.reduce((a, b) => {
+                let distA = Math.sqrt(Math.pow(this.x - a.x, 2) + Math.pow(this.y - a.y, 2));
+                let distB = Math.sqrt(Math.pow(this.x - b.x, 2) + Math.pow(this.y - b.y, 2));
+                return distA < distB ? a : b;
+            });
+            return [nearest];
+        }
+    }
+
+    attack(targets, game) {
+        let hits = 1;
+        if (this.trait === '多段' && TRAITS['多段'][this.type]) {
+            hits = TRAITS['多段'][this.type].hits || 1;
+        }
+
+        let currentElement = this.buffTimer > 0 ? this.buffElement : this.element;
+        let currentAtk = this.buffTimer > 0 ? this.atk * this.buffAtkMult : this.atk;
+        let effectColor = (ELEMENTS[currentElement] && ELEMENTS[currentElement].color) ? ELEMENTS[currentElement].color : '#fff';
+
+        targets.forEach(target => {
+            let dmg = calculateDamage(currentAtk, currentElement, '無', target.def, this.trait);
+
+            if (this.type === '遠距離') {
+                for(let i=0; i<hits; i++) {
+                    setTimeout(() => {
+                        game.projectiles.push(new Projectile(this.x, this.y, target.x, target.y, 'bullet', currentAtk, currentElement, this.trait));
+                    }, i * 200);
+                }
+            } else if (this.type === '妨害') {
+                for(let i=0; i<hits; i++) {
+                    setTimeout(() => {
+                        let p = new Projectile(this.x, this.y, target.x, target.y, 'interference_bomb', currentAtk, currentElement, this.trait);
+                        p.auraRange = this.range; 
+                        game.projectiles.push(p);
+                    }, i * 200);
+                }
+            } else {
+                for(let i=0; i<hits; i++) {
+                    setTimeout(() => {
+                        if (target && target.hp > 0 && game.enemies.includes(target)) {
+                            target.takeDamage(dmg, this.trait, effectColor, game);
+                        }
+                    }, i * 200);
+                }
+                game.projectiles.push(new Projectile(this.x, this.y, target.x, target.y, 'slash'));
+            }
+        });
+    }
+
+    support(game) {
+        let effectColor = (ELEMENTS[this.element] && ELEMENTS[this.element].color) ? ELEMENTS[this.element].color : '#fff';
+        
+        if (this.trait === 'チャージ') {
+            let healAmount = TRAITS['チャージ']['支援'].heal || 2;
+            game.baseHp = Math.min(game.maxBaseHp, game.baseHp + healAmount);
+            game.addEffect(this.x, this.y - 15, `HEAL +${healAmount}`, '#44ff44');
+            return; 
+        }
+
+        let duration = (this.trait === '支援') ? 5.0 : 3.0;
+        let atkMult = 1.5;
+
+        let potentialTargets = [];
+        if (game.player) potentialTargets.push(game.player);
+        game.allies.forEach(a => { if(a !== this) potentialTargets.push(a); });
+        game.summonObjects.forEach(s => potentialTargets.push(s));
+
+        let inRangeTargets = potentialTargets.filter(t => {
+            let dist = Math.sqrt(Math.pow(this.x - t.x, 2) + Math.pow(this.y - t.y, 2));
+            return dist <= this.range;
+        });
+
+        inRangeTargets.sort((a, b) => {
+            let distA = Math.sqrt(Math.pow(this.x - a.x, 2) + Math.pow(this.y - a.y, 2));
+            let distB = Math.sqrt(Math.pow(this.x - b.x, 2) + Math.pow(this.y - b.y, 2));
+            return distA - distB;
+        });
+
+        let targetsToBuff = inRangeTargets.slice(0, 2);
+        
+        if (targetsToBuff.length > 0) {
+            game.addEffect(this.x, this.y - 15, "SUPPORT!", effectColor);
+            targetsToBuff.forEach(t => {
+                t.buffTimer = duration;
+                t.buffElement = this.element;
+                t.buffAtkMult = atkMult;
+                game.addEffect(t.x, t.y, "BUFF!", effectColor);
+            });
+        }
+
+        if (this.trait === '反発') {
+            let kbRange = 1 * RANGE_UNIT; 
+            let kbActivated = false;
+            game.enemies.forEach(enemy => {
+                let dist = Math.sqrt(Math.pow(this.x - enemy.x, 2) + Math.pow(this.y - enemy.y, 2));
+                if (dist <= kbRange) {
+                    enemy.takeDamage(0, '反発', effectColor, game);
+                    kbActivated = true;
+                }
+            });
+            if (kbActivated) {
+                game.addEffect(this.x, this.y + 15, "AREA KB!", '#ffaaaa');
+            }
+        }
+    }
+
+    summon(target, game) {
+        let effectColor = (ELEMENTS[this.element] && ELEMENTS[this.element].color) ? ELEMENTS[this.element].color : '#fff';
+        game.addEffect(this.x, this.y - 15, "SUMMON!", effectColor);
+        
+        let spawnX = target.x + (Math.random() * 40 - 20);
+        let spawnY = 350 + (Math.random() * 40 - 20);
+        
+        let obj = new SummonObject(spawnX, spawnY, this.atk, this.element, this.trait);
+        game.summonObjects.push(obj);
+    }
+
+    draw(ctx) {
+        let displayColor = (this.buffTimer > 0 && ELEMENTS[this.buffElement]) ? 
+                            ELEMENTS[this.buffElement].color : 
+                            (ELEMENTS[this.element] ? ELEMENTS[this.element].color : '#fff');
+
+        ctx.fillStyle = displayColor;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        let dispTxt = (this.element ? this.element[0] : '?') + (this.type ? this.type[0] : '?');
+        ctx.fillText(dispTxt, this.x, this.y + 3);
+        
+        if (this.trait) {
+            ctx.fillStyle = '#aaa';
+            ctx.fillText(this.trait[0], this.x, this.y + 13);
+        }
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.range, 0, Math.PI * 2);
+        ctx.stroke();
+
+        if (this.buffTimer > 0 && ELEMENTS[this.buffElement]) {
+            ctx.strokeStyle = ELEMENTS[this.buffElement].color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.lineWidth = 1;
+        }
+
+        let ratio = 1 - (this.attackTimer / this.interval);
+        drawCircularGauge(ctx, this.x, this.y, this.radius + 4, ratio, 'rgba(255, 255, 255, 0.8)');
+    }
+}
+
+/**
+ * 敵クラス
+ */
+class Enemy {
+    constructor(x, y, type, hpMult) {
+        this.x = x;
+        this.y = y;
+        this.type = type;
+        this.radius = 10;
+        
+        let base = ENEMY_TYPES[type];
+        this.hp = base.hp * hpMult;
+        this.maxHp = this.hp;
+        this.atk = base.atk;
+        this.def = base.def;
+        this.baseSpeed = base.spd * ENEMY_BASE_SPEED; 
+        this.interval = base.interval;
+        
+        this.range = base.range * RANGE_UNIT;
+        this.effectiveRange = Math.max(0, (base.range - 1) * RANGE_UNIT);
+        
+        this.color = base.color;
+        this.attackTimer = this.interval; 
+        
+        this.status = {
+            isBuffed: false,
+            knockbackTime: 0,
+            knockbackSpeed: 0,
+            speedMod: 1.0,      
+            speedModTime: 0     
+        };
+    }
+
+    takeDamage(dmg, trait, effectColor, game) {
+        if (isNaN(dmg)) dmg = 1;
+        
+        if (dmg > 0) {
+            this.hp -= dmg;
+            game.addEffect(this.x, this.y, dmg, effectColor);
+        } else if (trait === '反発') {
+            game.addEffect(this.x, this.y, "KB!", effectColor);
+        }
+
+        if (trait === '反発') {
+            this.status.knockbackTime = 0.2;  
+            this.status.knockbackSpeed = -200; 
+        }
+    }
+
+    update(dt, game) {
+        let moving = true;
+
+        if (this.status.speedModTime > 0) {
+            this.status.speedModTime -= dt;
+        } else {
+            this.status.speedMod = 1.0; 
+        }
+        let currentSpeed = this.baseSpeed * this.status.speedMod;
+
+        if (this.status.knockbackTime > 0) {
+            this.status.knockbackTime -= dt;
+            this.y += this.status.knockbackSpeed * dt;
+            moving = false; 
+        }
+
+        if (this.type === '支' && moving) {
+            let targetEnemy = null;
+            let minDist = Infinity;
+
+            for (let other of game.enemies) {
+                if (other !== this) {
+                    let dist = Math.sqrt(Math.pow(this.x - other.x, 2) + Math.pow(this.y - other.y, 2));
+                    if (dist < minDist) {
+                        minDist = dist;
+                        targetEnemy = other;
+                    }
+                }
+            }
+
+            if (targetEnemy) {
+                if (minDist > this.range) {
+                    let dx = targetEnemy.x - this.x;
+                    let dy = targetEnemy.y - this.y;
+                    let len = Math.sqrt(dx*dx + dy*dy);
+                    if (len > 0) { 
+                        this.x += (dx / len) * currentSpeed * dt;
+                        this.y += (dy / len) * currentSpeed * dt;
+                    }
+                    moving = false; 
+                } else {
+                    moving = false;
+                    this.attackTimer -= dt;
+                    if (this.attackTimer <= 0) {
+                        game.addEffect(targetEnemy.x, targetEnemy.y, "BUFF!", this.color);
+                        
+                        if (!targetEnemy.status.isBuffed) {
+                            if (targetEnemy.type === '防') {
+                                targetEnemy.def *= 2.0;
+                            } else {
+                                targetEnemy.atk *= 1.2;
+                            }
+                            targetEnemy.status.isBuffed = true;
+                        }
+                        this.attackTimer = this.interval;
+                    }
+                }
+            }
+
+            if (this.y >= BLUE_LINE_Y) {
+                this.y = BLUE_LINE_Y;
+                moving = false;
+            }
+
+        } else if (moving) {
+            if (this.y + this.effectiveRange >= BLUE_LINE_Y) {
+                this.y = BLUE_LINE_Y - this.effectiveRange;
+                moving = false;
+                
+                this.attackTimer -= dt;
+                if (this.attackTimer <= 0) {
+                    game.baseHp -= this.atk;
+                    game.addEffect(CANVAS_W/2, CANVAS_H - 20, `拠点ダメージ! -${this.atk}`, "#f00");
+                    this.attackTimer = this.interval;
+                }
+            }
+        }
+
+        if (moving) {
+            this.y += currentSpeed * dt;
+            this.attackTimer = this.interval; 
+        }
+    }
+
+    draw(ctx) {
+        if (isNaN(this.x) || isNaN(this.y)) return;
+
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (this.status.speedMod < 1.0) {
+            ctx.strokeStyle = '#4444ff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.lineWidth = 1;
+        }
+
+        let hpRatio = this.hp / this.maxHp;
+        if (isNaN(hpRatio) || hpRatio < 0) hpRatio = 0;
+        if (hpRatio > 1) hpRatio = 1;
+        
+        ctx.fillStyle = '#f00';
+        ctx.fillRect(this.x - 10, this.y - 15, 20, 3);
+        ctx.fillStyle = '#0f0';
+        ctx.fillRect(this.x - 10, this.y - 15, 20 * hpRatio, 3);
+        
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.type, this.x, this.y + 3);
+        
+        if (this.status.isBuffed) {
+            ctx.strokeStyle = '#ffaa00';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.lineWidth = 1;
+        }
+
+        if (this.attackTimer < this.interval) {
+            let ratio = 1 - (this.attackTimer / this.interval);
+            drawCircularGauge(ctx, this.x, this.y, this.radius + 4, ratio, 'rgba(255, 100, 100, 0.8)');
+        }
+    }
+}
+
+class Projectile {
+    constructor(startX, startY, targetX, targetY, visualType, atk=0, element='無', trait='') {
+        this.x = startX;
+        this.y = startY;
+        this.tx = targetX;
+        this.ty = targetY;
+        this.visualType = visualType;
+        this.atk = atk;
+        this.element = element;
+        this.trait = trait;
+        this.life = 0.2;
+        this.hitList = []; 
+        this.auraRange = 0; 
+        
+        let dx = targetX - startX;
+        let dy = targetY - startY;
+        let len = Math.sqrt(dx*dx + dy*dy);
+
+        if (this.visualType === 'bullet') {
+            this.life = 1.5;
+            if (len === 0 || isNaN(len)) {
+                this.vx = 0; this.vy = -450; 
+            } else {
+                this.vx = (dx / len) * 450;
+                this.vy = (dy / len) * 450;
+            }
+        } else if (this.visualType === 'interference_bomb') {
+            if (len === 0 || isNaN(len)) {
+                this.life = 0;
+            } else {
+                let speed = 400; 
+                this.vx = (dx / len) * speed;
+                this.vy = (dy / len) * speed;
+                this.life = len / speed; 
+            }
+        }
+    }
+
+    update(dt, game) {
+        this.life -= dt;
+
+        if (this.visualType === 'bullet') {
+            this.x += this.vx * dt;
+            this.y += this.vy * dt;
+            
+            if (this.atk > 0) {
+                for (let enemy of game.enemies) {
+                    let dist = Math.sqrt(Math.pow(this.x - enemy.x, 2) + Math.pow(this.y - enemy.y, 2));
+                    
+                    if (dist < 15) {
+                        if (this.hitList.includes(enemy)) continue;
+                        this.hitList.push(enemy);
+
+                        let dmg = calculateDamage(this.atk, this.element, '無', enemy.def, this.trait);
+                        let effectColor = (ELEMENTS[this.element] && ELEMENTS[this.element].color) ? ELEMENTS[this.element].color : '#fff';
+                        
+                        enemy.takeDamage(dmg, this.trait, effectColor, game);
+                        
+                        if (this.trait !== '貫通') {
+                            this.life = 0;
+                            break;
+                        }
+                    }
+                }
+            }
+        } else if (this.visualType === 'interference_bomb') {
+            this.x += this.vx * dt;
+            this.y += this.vy * dt;
+            if (this.life <= 0) {
+                game.interferenceAreas.push(new InterferenceArea(this.x, this.y, this.atk, this.element, this.trait, this.auraRange));
+            }
+        }
+    }
+
+    draw(ctx) {
+        if (this.life <= 0 || isNaN(this.x) || isNaN(this.y)) return;
+        
+        if (this.visualType === 'slash') {
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.tx, this.ty);
+            ctx.stroke();
+        } else if (this.visualType === 'bullet') {
+            let effectColor = (ELEMENTS[this.element] && ELEMENTS[this.element].color) ? ELEMENTS[this.element].color : '#fff';
+            ctx.fillStyle = effectColor;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 4, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (this.visualType === 'interference_bomb') {
+            let effectColor = (ELEMENTS[this.element] && ELEMENTS[this.element].color) ? ELEMENTS[this.element].color : '#fff';
+            ctx.fillStyle = effectColor;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 6, 0, Math.PI * 2); 
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.stroke();
+        }
+    }
+}
+
+window.onload = () => {
+    const game = new Game('gameCanvas');
+
+    document.getElementById('spawnBtn').addEventListener('click', () => {
+        const val = document.getElementById('commentInput').value;
+        if (val) {
+            game.parseComment(val);
+        }
+    });
+
+    document.getElementById('spawnEnemyBtn').addEventListener('click', () => {
+        game.spawnEnemy();
+    });
+
+    document.getElementById('demoBtn').addEventListener('click', () => {
+        game.toggleDemoMode();
+    });
+};
+</script>
+</body>
+</html>
